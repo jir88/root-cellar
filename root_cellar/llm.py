@@ -41,21 +41,18 @@ class LLM(BaseModel, ABC):
         """
         raise NotImplementedError("Method must be implemented in a subclass!")
 
-    def generate_instruct(self, messages, respond=True, response_role=None, stream=True):
+    def generate_instruct(self, messages, stream=True):
         """
         Generate a response to a given text prompt. If stream is true, function returns a generator
         that yields the response chunks as they become available. Otherwise, the full response is
         returned as a string.
 
         Args:
-        messages (list[dict]): The chat messages that the LLM should respond to
-        respond (bool): If true, LLM will respond to last message. If false, LLM will
-            continue generating from the end of the last message.
-        response_role (str): The role LLM should use when responding.
-        stream (bool): Whether the response should be streamed as it is generated
+            messages (list[dict]): The chat messages that the LLM should respond to
+            stream (bool): Whether the response should be streamed as it is generated
 
         Returns:
-        A generator function if stream is true, otherwise a string containing the response.
+            A generator function if stream is true, otherwise a string containing the response.
         """
         raise NotImplementedError("Method must be implemented in a subclass!")
     
@@ -106,7 +103,7 @@ class OpenAILLM(LLM):
         """
         Called to set up the OpenAI client object once the object is initialized.
         """
-        self.client = openai.OpenAI(
+        self.client = openai.AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
             timeout=1200,
@@ -162,7 +159,7 @@ class OpenAILLM(LLM):
                     ol_dict['eval_duration'] = chunk.timings['predicted_ms']*1.0e6
                 yield ol_dict
 
-    def generate_instruct(self, messages, stream=True):
+    async def generate_instruct(self, messages, stream=True):
         """
         Generate a response to a given text prompt. If stream is true, function returns a generator
         that yields the response chunks as they become available. Otherwise, the full response is
@@ -175,7 +172,7 @@ class OpenAILLM(LLM):
         Returns:
             A generator function if stream is true, otherwise a string containing the response.
         """
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             stream=stream,
@@ -196,16 +193,17 @@ class OpenAILLM(LLM):
                 ol_dict['eval_duration'] = response.timings['predicted_ms']*1.0e6
             yield ol_dict
         else:
-            for chunk in response:
+            async for chunk in response:
                 ol_dict = {
-                    'response': chunk.choices[0].text
+                    'response': chunk.choices[0].delta.content
                 }
                 # add generation speed if available
-                if chunk.usage is not None:
-                    ol_dict['prompt_eval_count'] = chunk.timings['prompt_n']
-                    ol_dict['eval_count'] = chunk.timings['predicted_n']
-                    # ollama outputs times in nanoseconds for some reason...
-                    ol_dict['eval_duration'] = chunk.timings['predicted_ms']*1.0e6
+                if chunk.choices[0].finish_reason == 'stop':
+                    ol_dict['prompt_n'] = chunk.timings['prompt_n']
+                    ol_dict['prompt_per_second'] = chunk.timings['prompt_per_second']
+                    ol_dict['cache_n'] = chunk.timings['cache_n']
+                    ol_dict['predicted_n'] = chunk.timings['predicted_n']
+                    ol_dict['predicted_per_second'] = chunk.timings['predicted_per_second']
                 yield ol_dict
 
     def generate_structured(self, messages:List[Dict[str,str]], response_model:Type[BaseModel]):
