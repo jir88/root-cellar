@@ -233,7 +233,7 @@ class HierarchicalSummaryMemory(ChatMemory):
         description="Summaries which have been collapsed into the top-level summary."
     )
 
-    def update_all_memory(self):
+    async def update_all_memory(self):
         """
         Update memory so that all message levels fit within their corresponding
         token allotments. If the raw messages themselves are too big, the oldest
@@ -282,7 +282,7 @@ class HierarchicalSummaryMemory(ChatMemory):
                 idx_to_summarize = idx_to_summarize[slice(lim_idx+1)]
                 # summarize the messages
                 summarized_messages = [self.all_memory[i] for i in idx_to_summarize]
-                new_top_summary = self._summarize_messages(
+                new_top_summary = await self._summarize_messages(
                     messages=summarized_messages,
                     prior_summaries=self.all_memory[:start_summ_index]
                 )
@@ -330,12 +330,12 @@ class HierarchicalSummaryMemory(ChatMemory):
             )
             summarized_messages = self.chat_thread.messages[slice(lim_idx+1)]
             # summarize
-            new_top_summary = self._summarize_messages(
+            new_top_summary = await self._summarize_messages(
                 messages=summarized_messages,
                 prior_summaries=self.all_memory
             )
             # update entity list
-            self._update_entity_definitions(
+            await self._update_entity_definitions(
                 messages=summarized_messages,
                 prior_summaries=self.all_memory[:start_summ_index]
             )
@@ -354,7 +354,7 @@ class HierarchicalSummaryMemory(ChatMemory):
             # new summary goes at the end
             self.all_memory.append(nts_dict)
 
-    def _summarize_messages(self, messages:list, prior_summaries:list=[]):
+    async def _summarize_messages(self, messages:list, prior_summaries:list=[]):
         """
         Summarize a list of messages, optionally including a list of older summaries
         as context.
@@ -381,18 +381,18 @@ class HierarchicalSummaryMemory(ChatMemory):
         # generate the summary
         llm_response = self.summary_llm.generate_instruct(
             messages=[sys_prompt, user_prompt],
-            respond=True,
-            response_role="assistant",
             stream=False
         )
         # pull the first/only result off the generator and strip whitespace
-        return next(llm_response)['response'].strip()
+        response = await anext(llm_response)
+        response = response['response']
+        return response.strip()
     
-    def _update_entity_definitions(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]]):
+    async def _update_entity_definitions(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]]):
         """
         Update any relevant entities. Extend this method to provide more complex handling.
         """
-        self.entity_manager.update_entities(
+        await self.entity_manager.update_entities(
                 messages=messages,
                 prior_summaries=prior_summaries
             )

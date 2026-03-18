@@ -225,7 +225,7 @@ class JSONEntityManager(EntityManager):
             raise ValueError("llm is required for SimpleEntityManager")
         return values
 
-    def update_entities(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]] = []) -> GenEntityList:
+    async def update_entities(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]] = []) -> GenEntityList:
         """
         Update a list of previously-mentioned entities, optionally including a list of
         older summaries as context.
@@ -268,12 +268,11 @@ class JSONEntityManager(EntityManager):
             }
             update_decision = self.llm.generate_instruct(
                 messages=[sys_prompt, user_prompt],
-                response_role="assistant",
                 stream=False
             )
             print("Checking entity: " + entity.name)
             llm_response = ""
-            for chunk in update_decision:
+            async for chunk in update_decision:
                 llm_response += chunk['response']
             print("Needs updating? " + llm_response)
 
@@ -287,20 +286,21 @@ class JSONEntityManager(EntityManager):
                     'role': 'user',
                     'content': f"Please update entity '{entity.name}'. Respond ONLY with the updated entity name and description formatted as 'name: description'."
                 }
-                response_start = {
-                    'role': 'assistant',
-                    'content': f"{entity.name}: "
-                }
                 updated_entity = self.llm.generate_instruct(
-                    messages=[sys_prompt, user_prompt, response_msg, update_prompt, response_start],
-                    respond=False,
+                    messages=[sys_prompt, user_prompt, response_msg, update_prompt],
                     stream=False
                 )
                 
                 llm_response = ""
-                for chunk in updated_entity:
+                async for chunk in updated_entity:
                     llm_response += chunk['response']
                 # parse response
+                # TODO: split out name, if any, and update if needed
+                try:
+                    idx = llm_response.index(":")
+                    print("index: " + str(idx))
+                except Exception as e:
+                    print(str(e))
                 updated_entity = GenEntity(
                     name=entity.name,
                     description=llm_response.strip()
@@ -326,11 +326,10 @@ class JSONEntityManager(EntityManager):
         }
         new_entity_response = self.llm.generate_instruct(
             messages=[sys_prompt, new_ent_prompt],
-            response_role="assistant",
             stream=False
         )
         llm_response = ""
-        for chunk in new_entity_response:
+        async for chunk in new_entity_response:
             llm_response += chunk['response']
         print("List of entities to add:")
         print(llm_response)
@@ -364,20 +363,16 @@ class JSONEntityManager(EntityManager):
                 'role': 'user',
                 'content': f"Please update entity '{name}'. Respond ONLY with the updated entity name and description formatted as 'name: description'."
             }
-            response_start = {
-                'role': 'assistant',
-                'content': f"{name}: "
-            }
             updated_entity = self.llm.generate_instruct(
-                messages=[sys_prompt, update_prompt, response_start],
-                respond=False,
+                messages=[sys_prompt, update_prompt],
                 stream=False
             )
             
             llm_response = ""
-            for chunk in updated_entity:
+            async for chunk in updated_entity:
                 llm_response += chunk['response']
             # parse response
+            # TODO: split out name, if any, and update if needed
             updated_entity = GenEntity(
                 name=name,
                 description=llm_response.strip()

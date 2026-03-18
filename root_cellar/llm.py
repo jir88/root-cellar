@@ -183,14 +183,15 @@ class OpenAILLM(LLM):
         
         if not stream:
             ol_dict = {
-                'response': response.choices[0].text
+                'response': response.choices[0].message.content
             }
             # add generation speed if available
-            if response.usage is not None:
-                ol_dict['prompt_eval_count'] = response.timings['prompt_n']
-                ol_dict['eval_count'] = response.timings['predicted_n']
-                # ollama outputs times in nanoseconds for some reason...
-                ol_dict['eval_duration'] = response.timings['predicted_ms']*1.0e6
+            if response.choices[0].finish_reason == 'stop':
+                ol_dict['prompt_n'] = response.timings['prompt_n']
+                ol_dict['prompt_per_second'] = response.timings['prompt_per_second']
+                ol_dict['cache_n'] = response.timings['cache_n']
+                ol_dict['predicted_n'] = response.timings['predicted_n']
+                ol_dict['predicted_per_second'] = response.timings['predicted_per_second']
             yield ol_dict
         else:
             async for chunk in response:
