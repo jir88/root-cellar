@@ -194,18 +194,22 @@ class OpenAILLM(LLM):
                 ol_dict['predicted_per_second'] = response.timings['predicted_per_second']
             yield ol_dict
         else:
-            async for chunk in response:
-                ol_dict = {
-                    'response': chunk.choices[0].delta.content
-                }
-                # add generation speed if available
-                if chunk.choices[0].finish_reason == 'stop':
-                    ol_dict['prompt_n'] = chunk.timings['prompt_n']
-                    ol_dict['prompt_per_second'] = chunk.timings['prompt_per_second']
-                    ol_dict['cache_n'] = chunk.timings['cache_n']
-                    ol_dict['predicted_n'] = chunk.timings['predicted_n']
-                    ol_dict['predicted_per_second'] = chunk.timings['predicted_per_second']
-                yield ol_dict
+            try:
+                async for chunk in response:
+                    ol_dict = {
+                        'response': chunk.choices[0].delta.content
+                    }
+                    # add generation speed if available
+                    if chunk.choices[0].finish_reason == 'stop':
+                        ol_dict['prompt_n'] = chunk.timings['prompt_n']
+                        ol_dict['prompt_per_second'] = chunk.timings['prompt_per_second']
+                        ol_dict['cache_n'] = chunk.timings['cache_n']
+                        ol_dict['predicted_n'] = chunk.timings['predicted_n']
+                        ol_dict['predicted_per_second'] = chunk.timings['predicted_per_second']
+                    yield ol_dict
+            finally:
+                # stop the LLM generating
+                await response.close()
 
     def generate_structured(self, messages:List[Dict[str,str]], response_model:Type[BaseModel]):
         """
