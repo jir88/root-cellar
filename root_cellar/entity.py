@@ -338,11 +338,13 @@ class JSONEntityManager(EntityManager):
         if not list_txt:
             print("Warning: LLM may have made a mistake writing out a list of entities to add!")
             print("LLM response was: " + llm_response)
+            self.entity_list = updated_list
             return updated_list
         # get just the list
         list_txt = list_txt.group(1).strip()
         # if list is empty
         if len(list_txt) == 0:
+            self.entity_list = updated_list
             return updated_list
         # split on commas to get entities
         list_names = list_txt.split(",")
@@ -355,6 +357,7 @@ class JSONEntityManager(EntityManager):
         
         # if nothing new to add
         if len(list_names) == 0:
+            self.entity_list = updated_list
             return updated_list
         
         # generate descriptions for new entities
