@@ -318,9 +318,10 @@ class HierarchicalSummaryMemory(ChatMemory):
         # is message level too big?
         level_allowance = self.summary_llm.sampling_options['num_ctx']*self.prop_ctx
         # how long is the current message thread?
-        current_level_tokens = 0
+        current_level_text = ""
         for summary in self.chat_thread.messages:
-            current_level_tokens += self._chars_to_tokens(summary['content'])
+            current_level_text += " " + summary['content']
+        current_level_tokens = self._chars_to_tokens(current_level_text)
         # if it is too big
         if (higher_level_tokens + current_level_tokens) >= level_allowance:
             # index of last message that fills up our summarization budget
@@ -452,6 +453,8 @@ class HierarchicalSummaryMemory(ChatMemory):
     def summary_level_size(self, level:int):
         """
         Estimate the number of tokens in all summaries of a given level.
+        We concatenate all the summaries and tokenize them at once to avoid
+        spamming the LLM backend, which may reduce the token count slightly.
 
         Args:
         level (int): the summary level of interest
@@ -460,15 +463,17 @@ class HierarchicalSummaryMemory(ChatMemory):
         """
         if len(self.all_memory) == 0:
             return 0
-        level_size = 0
+        level_text = ""
         for summary in self.all_memory:
             if summary['level'] == level:
-                level_size += self._chars_to_tokens(summary['content'])
-        return level_size
+                level_text += " " + summary['content']
+
+        return self._chars_to_tokens(level_text)
     
     def _chars_to_tokens(self, text:str):
         """
-        Extremely rough estimation of tokens in a string (~3.5 chars/token).
+        If possible, uses LLM tokenizer to count tokens. Otherwise, uses an
+        extremely rough estimation of tokens in a string (~3.5 chars/token).
 
         Args:
         text (str): the text to be estimated
