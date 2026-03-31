@@ -26,27 +26,42 @@ class SimpleEntityList(BaseModel):
         description="A list of all the entities."
     )
 
-class Entity:
+class Entity(BaseModel):
     """A single entity mentioned in a chat thread."""
 
-    id: str
-    """Unique identifier for this entity."""
-    name: str
-    """The name of this entity."""
-    description: str
-    """A description of this entity. Use more detail for more important entities."""
-    last_used_in_summary: int
-    """
-    The index of the most recent summary where this entity appeared, whether or not
-    the entity is directly mentioned in the summary text.
-    """
-    last_injected_with_message: int # maybe not put this here?
-    """
-    The index of the last AI message where this entity was injected as context.
-    If the entity is injected at the beginning via a summary, this value will be -1.
-    """
-    is_in_context: bool
-    """Whether or not this entity is currently injected into the chat thread."""
+    id: str = Field(
+        default=None,
+        description="Unique identifier for this entity."
+    )
+
+    name: str = Field(
+        description="The name of this entity."
+    )
+
+    description: str = Field(
+        description="A description of this entity. Use more detail for more important entities."
+    )
+
+    last_used_in_summary: int = Field(
+        default=-1,
+        description=(
+            "The index of the most recent summary where this entity appeared, whether or not ",
+            "the entity is directly mentioned in the summary text."
+        )
+    )
+
+    last_injected_with_message: int = Field( # maybe not put this here?
+        default=-1,
+        description=(
+            "The index of the last AI message where this entity was injected as context. ",
+            "If the entity is injected at the beginning via a summary, this value will be -1."
+        )
+    )
+    
+    is_in_context: bool = Field(
+        default=False,
+        description="Whether or not this entity is currently injected into the chat thread."
+    )
 
 class GenEntity(BaseModel):
     """
