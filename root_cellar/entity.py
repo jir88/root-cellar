@@ -1,4 +1,5 @@
 import re
+import uuid
 from abc import ABC
 from typing import List, Optional, Dict, Any, Literal, Union, AnyStr, ClassVar
 from pydantic import BaseModel,Field,SerializeAsAny,root_validator
@@ -212,8 +213,8 @@ class JSONEntityManager(EntityManager):
         default=...,
         discriminator='llm_class',
         description="LLM instance used to generate the entity list")
-    entity_list: GenEntityList = Field(
-        default=GenEntityList(entities=[]), 
+    entity_list: List[Entity] = Field(
+        default=[], 
         description="A list of the entities mentioned in this chat thread."
     )
     prompt_entity_list: str = Field(
@@ -240,7 +241,7 @@ class JSONEntityManager(EntityManager):
             raise ValueError("llm is required for SimpleEntityManager")
         return values
 
-    async def update_entities(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]] = []) -> GenEntityList:
+    async def update_entities(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]] = []) -> List[Entity]:
         """
         Update a list of previously-mentioned entities, optionally including a list of
         older summaries as context.
@@ -257,12 +258,12 @@ class JSONEntityManager(EntityManager):
             prior_summaries = [{'content': "No prior context."}]
 
         # if no existing entity list, put in a placeholder
-        old_ent_list = self.entity_list.entities
+        old_ent_list = self.entity_list
         
         if old_ent_list is None or len(old_ent_list) == 0:
             ent_txt = "No prior entity list available."
         else:
-            ent_txt = "\n\n".join([ent.name + ": " + ent.description for ent in self.entity_list.entities])
+            ent_txt = "\n\n".join([ent.name + ": " + ent.description for ent in self.entity_list])
 
         # construct system prompt
         sys_prompt = {
@@ -274,9 +275,9 @@ class JSONEntityManager(EntityManager):
             )
         }
         # make blank list to hold updated entities
-        updated_list = GenEntityList(entities=[])
+        updated_list = []
         # for each entity
-        for entity in self.entity_list.entities:
+        for entity in self.entity_list:
             user_prompt = {
                 'role': 'user',
                 'content': f"Should entity '{entity.name}' be updated based on the messages? Respond ONLY with ##YES## or ##NO##."
@@ -316,7 +317,7 @@ class JSONEntityManager(EntityManager):
                     print("index: " + str(idx))
                 except Exception as e:
                     print(str(e))
-                updated_entity = GenEntity(
+                updated_entity = Entity(
                     name=entity.name,
                     description=llm_response.strip()
                 )
@@ -391,7 +392,7 @@ class JSONEntityManager(EntityManager):
                 llm_response += chunk['response']
             # parse response
             # TODO: split out name, if any, and update if needed
-            updated_entity = GenEntity(
+            updated_entity = Entity(
                 name=name,
                 description=llm_response.strip()
             )
@@ -403,12 +404,12 @@ class JSONEntityManager(EntityManager):
         self.entity_list = updated_list
         return updated_list
     
-    def detect_entities(self, text:str) -> List[GenEntity]:
+    def detect_entities(self, text:str) -> List[Entity]:
         """
         Check whether any entities are mentioned in a string.
         """
         found_entities = []
-        for entity in self.entity_list.entities:
+        for entity in self.entity_list:
             if text.find(entity.name) != -1:
                 found_entities.append(entity)
         return found_entities
