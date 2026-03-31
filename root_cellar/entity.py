@@ -388,6 +388,16 @@ class JSONEntityManager(EntityManager):
         self.entity_list = updated_list
         return updated_list
     
+    def detect_entities(self, text:str) -> List[GenEntity]:
+        """
+        Check whether any entities are mentioned in a string.
+        """
+        found_entities = []
+        for entity in self.entity_list.entities:
+            if text.find(entity.name) != -1:
+                found_entities.append(entity)
+        return found_entities
+
     def format_readable(self) -> str:
         """
         Convert entities to JSON for manual editing.
