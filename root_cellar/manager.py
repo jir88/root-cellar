@@ -563,8 +563,9 @@ class StatefulChatManager(ABC, BaseModel):
             message['id'] = len(ct.messages) + len(ct.archived_messages)
         # add to the active chat thread
         ct.messages.append(message)
-        # Needs updating: embed regenerated AI response
-        #st.session_state.chat_session.embed_text(st.session_state.chat_session.messages[-1], "message")
+        # check for entities mentioned in message
+        detected_entities = self.chat_memory.entity_manager.detect_entities(message['content'])
+        print(str(detected_entities))
 
     def messages_to_memory(self, n_msgs):
         """
@@ -619,6 +620,8 @@ class StatefulChatManager(ABC, BaseModel):
         """
         Generate an AI response starting with the end of the current thread.
         Uses summary messages to ensure we don't overflow the context window.
+        NOTE: response is NOT added to the chat thread automatically! User
+        MUST append the resulting message manually using 'append_message'.
 
         Args:
         stream (bool): whether to stream the response or not
