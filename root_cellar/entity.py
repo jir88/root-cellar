@@ -43,7 +43,12 @@ class Entity(BaseModel):
         description="A description of this entity. Use more detail for more important entities."
     )
 
-    last_used_in_summary: int = Field(
+    always_on: bool = Field(
+        default=False,
+        description="Should this entity always be included in context, even if not mentioned?"
+    )
+
+    last_used_in_summary: int = Field( # maybe not store here?
         default=-1,
         description=(
             "The index of the most recent summary where this entity appeared, whether or not ",
