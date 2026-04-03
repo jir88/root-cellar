@@ -563,9 +563,6 @@ class StatefulChatManager(ABC, BaseModel):
             message['id'] = len(ct.messages) + len(ct.archived_messages)
         # add to the active chat thread
         ct.messages.append(message)
-        # check for entities mentioned in message
-        detected_entities = self.chat_memory.entity_manager.detect_entities(message['content'])
-        print(str(detected_entities))
 
     def messages_to_memory(self, n_msgs):
         """
@@ -708,7 +705,7 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         if ct.system_prompt is not None:
             full_sys_prompt += ct.system_prompt.strip()
         # add entity list, if any
-        entity_list = self.chat_memory.entity_manager.entity_list.entities
+        entity_list = self.chat_memory.entity_manager.entity_list
         if entity_list is not None and len(entity_list) > 0:
             ent_txt = "\n\n".join([ent.name + ": " + ent.description for ent in entity_list])
             full_sys_prompt += "\n\nEntities appearing in previous messages:\n" + ent_txt
@@ -717,3 +714,23 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
             mems = [m['content'] for m in self.chat_memory.all_memory]
             full_sys_prompt += "\n\nSummary of all previous messages:\n" + "\n".join(mems)
         return full_sys_prompt
+
+    def append_message(self, message):
+        """
+        Append message to the chat thread. Also detects entities mentioned in the new
+        message and flags them as mentioned.
+
+        Args:
+        message (dict): Dict containing at least 'role' and 'content' keys
+        """
+        ct = self.chat_memory.chat_thread
+        # if missing, set ID to be the message index
+        if "id" not in message:
+            message['id'] = len(ct.messages) + len(ct.archived_messages)
+        # check for entities mentioned in message
+        detected_entities = self.chat_memory.entity_manager.detect_entities(message['content'])
+        print(str(detected_entities))
+        # add entity list to the message
+        message['entities'] = [entity.id for entity in detected_entities]
+        # add to the active chat thread
+        ct.messages.append(message)
