@@ -31,7 +31,7 @@ class Entity(BaseModel):
     """A single entity mentioned in a chat thread."""
 
     id: uuid.UUID = Field(
-        default_factory=uuid.uuid4,
+        default_factory=lambda: str(uuid.uuid4()),
         description="Unique identifier for this entity."
     )
 
