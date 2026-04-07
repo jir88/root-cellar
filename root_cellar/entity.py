@@ -240,6 +240,11 @@ class JSONEntityManager(EntityManager):
         description="System prompt used when asking the LLM to produce or update the entity list"
     )
 
+    max_summary_depth: int = Field(
+        default=3,
+        description="How many of the most recent memory summaries should have their entities injected into context?"
+    )
+
     @root_validator(pre=True)
     def ensure_llm_present(cls, values):
         if 'llm' not in values or values.get('llm') is None:
