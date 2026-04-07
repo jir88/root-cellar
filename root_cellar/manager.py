@@ -734,3 +734,24 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         message['entities'] = [entity.id for entity in detected_entities]
         # add to the active chat thread
         ct.messages.append(message)
+    
+    def get_recent_summary_entities(self) -> List[Entity]:
+        """Get a list of all the entities mentioned in the most recent memory summaries."""
+        entity_list = self.chat_memory.entity_manager.entity_list
+        # if no summaries, then have all entities injected this way
+        if len(self.chat_memory.all_memory) == 0:
+            return entity_list
+        # get summaries to consider
+        recent_summaries = self.chat_memory.all_memory[-self.chat_memory.entity_manager.max_summary_depth: ]
+        recent_ids = set()
+        # get set of IDs mentioned
+        for summary in recent_summaries:
+            ids = summary.get('entities')
+            if ids is not None:
+                recent_ids.update(ids)
+        # return the entity objects associated with these IDs
+        return [self.entity_manager.get_entity_with_id(id) for id in recent_ids]
+
+    def _get_always_on_entities(self) -> List[Entity]:
+        """Get a list of the entities flagged as always-on."""
+        return [entity for entity in self.chat_memory.entity_manager.entity_list if entity.always_on]
