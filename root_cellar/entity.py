@@ -328,6 +328,7 @@ class JSONEntityManager(EntityManager):
                 except Exception as e:
                     print(str(e))
                 updated_entity = Entity(
+                    id=entity.id, # keep original entity ID
                     name=entity.name,
                     description=llm_response.strip()
                 )
