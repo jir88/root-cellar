@@ -425,6 +425,13 @@ class JSONEntityManager(EntityManager):
                 found_entities.append(entity)
         return found_entities
 
+    def get_entity_with_id(self, id:str) -> Entity:
+        """Get the entity with a given ID, if any exists."""
+        for entity in self.entity_list:
+            if entity.id == id:
+                return entity
+        return None
+
     def format_readable(self) -> str:
         """
         Convert entities to JSON for manual editing.
