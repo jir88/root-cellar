@@ -102,7 +102,7 @@ class ChatThread(BaseModel):
             msg_dict = {
                 "id": len(self.archived_messages) + i/2,
                 "role": msg_parts[i],
-                "content": message_text[ent_end+1:],
+                "content": message_text[ent_end+1:].strip(),
                 "entities": entities
             }
             parsed_messages.append(msg_dict)
