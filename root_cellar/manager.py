@@ -799,7 +799,7 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
             if ids is not None:
                 recent_ids.update(ids)
         # return the entity objects associated with these IDs
-        return [self.entity_manager.get_entity_with_id(id) for id in recent_ids]
+        return [self.chat_memory.entity_manager.get_entity_with_id(id) for id in recent_ids]
 
     def _get_always_on_entities(self) -> List[Entity]:
         """Get a list of the entities flagged as always-on."""
