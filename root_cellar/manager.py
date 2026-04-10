@@ -262,6 +262,15 @@ class HierarchicalSummaryMemory(ChatMemory):
                     messages=summarized_messages,
                     prior_summaries=self.all_memory[:start_summ_index]
                 )
+                # get the entity IDs mentioned in the summaries we summarized
+                mentioned_entities = set()
+                for msg in summarized_messages:
+                    msg_entities = msg.get('entities')
+                    if msg_entities is not None:
+                        mentioned_entities.update(msg_entities)
+                # add their IDs to the new summary
+                new_top_summary['entities'] = [entity for entity in mentioned_entities]
+
                 # don't update entity list here -- we've already ingested that data
                 # when summarizing the raw messages
                 # put old summary messages in archive
@@ -316,6 +325,14 @@ class HierarchicalSummaryMemory(ChatMemory):
                 messages=summarized_messages,
                 prior_summaries=self.all_memory[:start_summ_index]
             )
+            # check for entities in the summarized messages
+            # allows for case where a new entity has just been mentioned
+            mentioned_entities = set()
+            for msg in summarized_messages:
+                mentioned_entities.update(self.entity_manager.detect_entities(msg['content']))
+            # now add entity IDs to new summary
+            new_top_summary['entities'] = [entity.id for entity in mentioned_entities]
+
             # archive these messages from the chat thread
             self.chat_thread.archive_messages(
                 start_idx=0,
@@ -680,10 +697,15 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         full_sys_prompt = ""
         if ct.system_prompt is not None:
             full_sys_prompt += ct.system_prompt.strip()
+        # pull always-on entities and recent summary entities
+        sys_prompt_entities = self._get_always_on_entities()
+        for entity in self.get_recent_summary_entities():
+            # don't duplicate entities
+            if entity not in sys_prompt_entities:
+                sys_prompt_entities.append(entity)
         # add entity list, if any
-        entity_list = self.chat_memory.entity_manager.entity_list
-        if entity_list is not None and len(entity_list) > 0:
-            ent_txt = "\n\n".join([ent.name + ": " + ent.description for ent in entity_list])
+        if len(sys_prompt_entities) > 0:
+            ent_txt = "\n\n".join([ent.name + ": " + ent.description for ent in sys_prompt_entities])
             full_sys_prompt += "\n\nEntities appearing in previous messages:\n" + ent_txt
         # add top-level summary from memory
         if len(self.chat_memory.all_memory) > 0:
@@ -710,6 +732,54 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         message['entities'] = [entity.id for entity in detected_entities]
         # add to the active chat thread
         ct.messages.append(message)
+    
+    def get_response(self, stream=True):
+        """
+        Generate an AI response starting with the end of the current thread.
+        Uses summary messages to ensure we don't overflow the context window.
+        NOTE: response is NOT added to the chat thread automatically! User
+        MUST append the resulting message manually using 'append_message'.
+
+        Args:
+        stream (bool): whether to stream the response or not
+
+        Returns: a generator if streaming or the response text if not streaming
+        """
+        sys_prompt = self.compile_system_prompt().strip()
+        all_msgs = [{ 'role': "system", 'content': sys_prompt }]
+        # build dict of entities for easy search/add/remove
+        unused_entities = {}
+        for entity in self.chat_memory.entity_manager.entity_list:
+            unused_entities[entity.id] = entity
+        # remove the entities we've already put in the system prompt
+        for entity in self._get_always_on_entities():
+            unused_entities.pop(entity.id)
+        for entity in self.get_recent_summary_entities():
+            unused_entities.pop(entity.id)
+        # add in-context messages after sys prompt
+        for message in self.chat_memory.chat_thread.messages:
+            msg_entity_ids = message.get('entities')
+            # if there are any entities
+            if msg_entity_ids is not None and len(msg_entity_ids) > 0:
+                # get the ones that haven't been injected yet
+                inject_entities = [unused_entities.pop(id) for id in msg_entity_ids if id in unused_entities]
+                # if there are any
+                if len(inject_entities) > 0:
+                    msg_text = "<context>\n\n" + \
+                        "\n\n".join([ent.name + ": " + ent.description for ent in inject_entities]) + \
+                        "\n\n</context>\n\n" + \
+                        message['content']
+                else:
+                    msg_text = message['content']
+            else:
+                msg_text = message['content']
+            # add copy of message dict with modified message text
+            all_msgs.append({ 'role': message['role'], 'content': msg_text })
+        # generate response using current thread's AI role
+        return self.llm.generate_instruct(
+            messages=all_msgs,
+            stream=stream
+        )
     
     def get_recent_summary_entities(self) -> List[Entity]:
         """Get a list of all the entities mentioned in the most recent memory summaries."""
