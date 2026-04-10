@@ -108,52 +108,6 @@ class ChatThread(BaseModel):
             parsed_messages.append(msg_dict)
         self.messages = parsed_messages
 
-    # def to_json(self):
-    #     """
-    #     Write this object out as a JSON object.
-
-    #     Returns: a string containing the JSON object
-    #     """
-    #     # define state to save
-    #     settings_to_download = {"session_id": self.session_id,
-    #                             "system_prompt": self.system_prompt,
-    #                             "messages": self.messages,
-    #                             "user_role": self.user_role,
-    #                             "ai_role": self.ai_role,
-    #                             "archived_messages": self.archived_messages
-    #                             }
-    #     # dump it to a JSON file
-    #     return json.dumps(settings_to_download)
-
-    # @classmethod
-    # def from_json(cls, json_data):
-    #     """
-    #     Load saved session state from a JSON object.
-    #     Args:
-    #     json_data (str): JSON object or file containing session data
-
-    #     Returns: a new ChatSession object initialized from the JSON data
-    #     """
-    #     # load saved state
-    #     if type(json_data) == str:
-    #         uploaded_settings = json.loads(json_data)
-    #     else:
-    #         uploaded_settings = json.load(json_data)
-    #     # create new thread object
-    #     new_obj = cls(session_id=uploaded_settings.get('session_id'))
-    #     # load system prompt
-    #     new_obj.system_prompt = uploaded_settings.get('system_prompt')
-    #     # load messages
-    #     new_obj.messages = uploaded_settings.get('messages')
-    #     # load user role
-    #     new_obj.user_role = uploaded_settings["user_role"]
-    #     # load AI role
-    #     new_obj.ai_role = uploaded_settings["ai_role"]
-    #     # load archived messages
-    #     new_obj.archived_messages = uploaded_settings.get('archived_messages')
-    #     # return object
-    #     return new_obj
-
 class ChatMemory(ABC, BaseModel):
     """
     Abstract class for various methods of helping LLMs 'remember' information beyond
