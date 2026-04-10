@@ -330,7 +330,8 @@ class JSONEntityManager(EntityManager):
                 updated_entity = Entity(
                     id=entity.id, # keep original entity ID
                     name=entity.name,
-                    description=llm_response.strip()
+                    description=llm_response.strip(),
+                    always_on=entity.always_on # keep setting
                 )
                 print("Updated entity:")
                 print(llm_response)
