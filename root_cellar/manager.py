@@ -1,3 +1,4 @@
+import json
 import re
 from typing import List, Optional, Dict, Any, AnyStr, ClassVar
 from pydantic import BaseModel, Field, SerializeAsAny
@@ -5,11 +6,13 @@ from abc import ABC
 
 
 from root_cellar.llm import OpenAILLM,LLMType
-from root_cellar.entity import SimpleEntityManager,JSONEntityManager
+from root_cellar.entity import SimpleEntityManager,JSONEntityManager, Entity
 
 class ChatThread(BaseModel):
     """
-    A single chat thread between a user and an LLM.
+    A single chat thread between a user and an LLM. Message dicts must contain keys 'role' and
+    'content'. They may also optionally contain a key 'entities' with a list of UUID strings for
+    entities mentioned in that message.
     
     Attributes:
     session_id (str): The unique identifier of the chat thread.
@@ -57,8 +60,17 @@ class ChatThread(BaseModel):
         message text following. Leading and trailing whitespace are ignored.
         """
         result = ""
-        for i in range(0, len(self.messages)):
-            result += "{{" + self.messages[i]['role'] + "}}\n" + self.messages[i]['content'] + "\n"
+        for msg in self.messages:
+            # add role
+            result += "{{" + msg['role'] + "}}\n"
+            # add entities, if any
+            entities = msg.get('entities')
+            if entities is not None:
+                result += json.dumps(entities) + "\n"
+            else:
+                result += "[]\n"
+            # actual message text
+            result += msg['content'] + "\n"
         return result
 
     def import_readable(self, formatted_messages:str):
@@ -78,10 +90,20 @@ class ChatThread(BaseModel):
         # should probably pre-allocate this...
         parsed_messages = []
         for i in range(0, len(msg_parts), 2):
+            message_text = str.strip(msg_parts[i + 1])
+            # pull entity list
+            ent_start = message_text.find("[")
+            ent_end = message_text.find("]")
+            if ent_start < ent_end and ent_start != -1 and ent_end != -1:
+                print(message_text[ent_start:ent_end+1])
+                entities = json.loads(message_text[ent_start:ent_end+1])
+            else:
+                entities = []
             msg_dict = {
                 "id": len(self.archived_messages) + i/2,
                 "role": msg_parts[i],
-                "content": str.strip(msg_parts[i + 1])
+                "content": message_text[ent_end+1:],
+                "entities": entities
             }
             parsed_messages.append(msg_dict)
         self.messages = parsed_messages
