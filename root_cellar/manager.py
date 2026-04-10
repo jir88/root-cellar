@@ -269,7 +269,7 @@ class HierarchicalSummaryMemory(ChatMemory):
                     if msg_entities is not None:
                         mentioned_entities.update(msg_entities)
                 # add their IDs to the new summary
-                new_top_summary['entities'] = [entity for entity in mentioned_entities]
+                mentioned_entities = [entity for entity in mentioned_entities]
 
                 # don't update entity list here -- we've already ingested that data
                 # when summarizing the raw messages
@@ -285,7 +285,8 @@ class HierarchicalSummaryMemory(ChatMemory):
                     'level': min(current_level + 1, self.n_levels),
                     # last message index of the last summary in this summary
                     'msg_idx': max([s['msg_idx'] for s in summarized_messages]),
-                    'content': new_top_summary
+                    'content': new_top_summary,
+                    'entities': mentioned_entities
                 }
                 self.all_memory.insert(
                     # replace the first summarized index
@@ -329,9 +330,10 @@ class HierarchicalSummaryMemory(ChatMemory):
             # allows for case where a new entity has just been mentioned
             mentioned_entities = set()
             for msg in summarized_messages:
-                mentioned_entities.update(self.entity_manager.detect_entities(msg['content']))
-            # now add entity IDs to new summary
-            new_top_summary['entities'] = [entity.id for entity in mentioned_entities]
+                entity_ids = [entity.id for entity in self.entity_manager.detect_entities(msg['content'])]
+                mentioned_entities.update(entity_ids)
+            # now convert entity IDs to a list
+            mentioned_entities = list(mentioned_entities)
 
             # archive these messages from the chat thread
             self.chat_thread.archive_messages(
@@ -343,7 +345,8 @@ class HierarchicalSummaryMemory(ChatMemory):
                 'level': 1,
                 # last message index of the last message in this summary
                 'msg_idx': round(summarized_messages[-1]['id']),
-                'content': new_top_summary
+                'content': new_top_summary,
+                'entities': mentioned_entities
             }
             # new summary goes at the end
             self.all_memory.append(nts_dict)
