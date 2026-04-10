@@ -335,10 +335,10 @@ class JSONEntityManager(EntityManager):
                 print("Updated entity:")
                 print(llm_response)
                 # add to updated list
-                updated_list.entities.append(updated_entity)
+                updated_list.append(updated_entity)
             else:
                 # not updating, so just put the old entity in the list
-                updated_list.entities.append(entity)
+                updated_list.append(entity)
         # now check if there are any new entities we need to extract
         new_ent_prompt = {
             'role': 'user',
@@ -380,7 +380,7 @@ class JSONEntityManager(EntityManager):
         # get unique names in case LLM repeated any
         list_names = set(list_names)
         # make sure these names are actually not in the existing list
-        list_names = list_names.difference([e.name for e in updated_list.entities])
+        list_names = list_names.difference([e.name for e in updated_list])
         
         # if nothing new to add
         if len(list_names) == 0:
@@ -410,7 +410,7 @@ class JSONEntityManager(EntityManager):
             print("Added new entity:")
             print(llm_response)
             # add to updated list
-            updated_list.entities.append(updated_entity)
+            updated_list.append(updated_entity)
         # now we have the final list
         self.entity_list = updated_list
         return updated_list
