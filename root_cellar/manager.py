@@ -758,7 +758,8 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         for entity in self._get_always_on_entities():
             unused_entities.pop(entity.id)
         for entity in self.get_recent_summary_entities():
-            unused_entities.pop(entity.id)
+            if entity.id in unused_entities.keys():
+                unused_entities.pop(entity.id)
         # add in-context messages after sys prompt
         for message in self.chat_memory.chat_thread.messages:
             msg_entity_ids = message.get('entities')
