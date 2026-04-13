@@ -264,12 +264,31 @@ class JSONEntityManager(EntityManager):
             the updated entity list
         """
         # if no prior context, just put 'No prior context.' in as a placeholder
-        if not prior_summaries:
+        if not prior_summaries or len(prior_summaries) == 0:
             prior_summaries = [{'content': "No prior context."}]
+        
+        entities_to_update = set()
+        # get entities mentioned in summaries, up to max_summary_depth
+        recent_summaries = prior_summaries[-self.max_summary_depth: ]
+        for summary in recent_summaries:
+            entity_ids = summary.get('entities')
+            if entity_ids is not None:
+                entities_to_update.update(entity_ids)
+        
+        # get entities mentioned in messages
+        for msg in messages:
+            entity_ids = msg.get('entities')
+            if entity_ids is not None:
+                entities_to_update.update(entity_ids)
+        
+        # make list of entities
+        entities_to_update = [self.get_entity_with_id(ent_id) for ent_id in entities_to_update]
+        # drop any None values -- this happens if an entity is deleted
+        entities_to_update = [entity for entity in entities_to_update if entity is not None]
+
+        old_ent_list = self.entity_list
 
         # if no existing entity list, put in a placeholder
-        old_ent_list = self.entity_list
-        
         if old_ent_list is None or len(old_ent_list) == 0:
             ent_txt = "No prior entity list available."
         else:
@@ -284,10 +303,11 @@ class JSONEntityManager(EntityManager):
                 messages="\n\n".join([m['content'] for m in messages])
             )
         }
-        # make blank list to hold updated entities
-        updated_list = []
-        # for each entity
-        for entity in self.entity_list:
+        # add entities we're not going to update into updated list
+        ent_diff = set([entity.id for entity in self.entity_list]).difference([entity.id for entity in entities_to_update])
+        updated_list = [self.get_entity_with_id(ent_id) for ent_id in ent_diff]
+        # for each entity that's been mentioned recently
+        for entity in entities_to_update:
             user_prompt = {
                 'role': 'user',
                 'content': f"Should entity '{entity.name}' be updated based on the messages? Respond ONLY with ##YES## or ##NO##."
