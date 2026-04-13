@@ -721,7 +721,7 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         sys_prompt_entities = self._get_always_on_entities()
         for entity in self.get_recent_summary_entities():
             # don't duplicate entities
-            if entity not in sys_prompt_entities:
+            if entity is not None and entity not in sys_prompt_entities:
                 sys_prompt_entities.append(entity)
         # add entity list, if any
         if len(sys_prompt_entities) > 0:
@@ -775,7 +775,7 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         for entity in self._get_always_on_entities():
             unused_entities.pop(entity.id)
         for entity in self.get_recent_summary_entities():
-            if entity.id in unused_entities.keys():
+            if entity is not None and entity.id in unused_entities.keys():
                 unused_entities.pop(entity.id)
         # add in-context messages after sys prompt
         for message in self.chat_memory.chat_thread.messages:
