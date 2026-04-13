@@ -95,7 +95,6 @@ class ChatThread(BaseModel):
             ent_start = message_text.find("[")
             ent_end = message_text.find("]")
             if ent_start < ent_end and ent_start != -1 and ent_end != -1:
-                print(message_text[ent_start:ent_end+1])
                 entities = json.loads(message_text[ent_start:ent_end+1])
             else:
                 entities = []
@@ -489,7 +488,16 @@ class HierarchicalSummaryMemory(ChatMemory):
         """
         result = ""
         for mem in self.all_memory:
-            result += "{{L" + str(mem['level']) + "@" + str(mem['msg_idx']) + "}}\n" + mem['content'] + "\n"
+            # add level and index
+            result += "{{L" + str(mem['level']) + "@" + str(mem['msg_idx']) + "}}\n"
+            # add entities, if any
+            entities = mem.get('entities')
+            if entities is not None:
+                result += json.dumps(entities) + "\n"
+            else:
+                result += "[]\n"
+            # actual message text
+            result += mem['content'] + "\n"
         return result
     
     memory_regex: ClassVar[re.Pattern[AnyStr]] = re.compile(r"{{L(\d+)@(\d+)}}")
@@ -511,10 +519,19 @@ class HierarchicalSummaryMemory(ChatMemory):
         # should probably pre-allocate this...
         parsed_messages = []
         for i in range(0, len(msg_parts), 3):
+            message_text = str.strip(msg_parts[i + 2])
+            # pull entity list
+            ent_start = message_text.find("[")
+            ent_end = message_text.find("]")
+            if ent_start < ent_end and ent_start != -1 and ent_end != -1:
+                entities = json.loads(message_text[ent_start:ent_end+1])
+            else:
+                entities = []
             msg_dict = {
                 "level": int(msg_parts[i]),
                 "msg_idx": int(msg_parts[i + 1]),
-                "content": str.strip(msg_parts[i + 2])
+                "content": message_text[ent_end+1:].strip(),
+                "entities": entities
             }
             parsed_messages.append(msg_dict)
         self.all_memory = parsed_messages
