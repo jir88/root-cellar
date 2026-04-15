@@ -747,7 +747,6 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
             message['id'] = len(ct.messages) + len(ct.archived_messages)
         # check for entities mentioned in message
         detected_entities = self.chat_memory.entity_manager.detect_entities(message['content'])
-        print(str(detected_entities))
         # add entity list to the message
         message['entities'] = [entity.id for entity in detected_entities]
         # add to the active chat thread
