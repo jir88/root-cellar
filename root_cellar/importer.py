@@ -18,6 +18,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-O", "--output", required=True, type=Path, action="store", help="Path to the output file to store results.")
     parser.add_argument("-S", "--settings", required=True, type=Path, action="store", help="Path to the manager object which will be used to import settings.")
     parser.add_argument("-F", "--force", action="store_true", help="Overwrite the output file if it already exists.")
+    parser.add_argument("-C", "--continue", action="store_true", dest="do_continue",
+        help=("Continue importing a partially-imported series of messages. Implies root-cellar input format."))
     return parser.parse_args()
 
 async def main():
@@ -57,7 +59,31 @@ async def main():
         prompt_entity_list=settings.chat_memory.entity_manager.prompt_entity_list,
         max_summary_depth=settings.chat_memory.entity_manager.max_summary_depth
     )
-    chat_thread = ChatThread(session_id=str(uuid.uuid4()), system_prompt=chat_manager.chat_memory.chat_thread.system_prompt)
+    # if we're continuing, copy over input entities
+    if args.do_continue:
+        entity_manager.entity_list = chat_manager.chat_memory.entity_manager.entity_list
+    
+    # if we're continuing, just use the input thread directly
+    if args.do_continue:
+        chat_thread = chat_manager.chat_memory.chat_thread
+    else:
+        chat_thread = ChatThread(session_id=str(uuid.uuid4()), system_prompt=chat_manager.chat_memory.chat_thread.system_prompt)
+        idx = 0
+        for msg in chat_manager.chat_memory.chat_thread.archived_messages:
+            chat_thread.messages.append({
+                'id': idx,
+                'role': msg['role'],
+                'content': msg['content']
+            })
+            idx += 1
+        for msg in chat_manager.chat_memory.chat_thread.messages:
+            chat_thread.messages.append({
+                'id': idx,
+                'role': msg['role'],
+                'content': msg['content']
+            })
+            idx += 1
+    
     chat_memory = StructuredHierarchicalMemory(
         summary_llm=settings.chat_memory.summary_llm,
         chat_thread=chat_thread,
@@ -67,35 +93,39 @@ async def main():
         n_levels=settings.chat_memory.n_levels,
         n_tok_summarize=settings.chat_memory.n_tok_summarize
     )
+    # if we're continuing, copy the existing memory list
+    if args.do_continue:
+        chat_memory.all_memory = chat_manager.chat_memory.all_memory
+        chat_memory.archived_memory = chat_manager.chat_memory.archived_memory
+    
     output_manager = StructuredHierarchicalManager(
         llm=settings.llm,
         chat_memory=chat_memory
     )
-    print(output_manager.model_dump_json(indent=2))
-    mem_len = 0
-    for msg in chat_manager.chat_memory.chat_thread.archived_messages:
-        clean_msg = {
-            "role": msg['role'],
-            "content": msg['content']
-        }
-        output_manager.append_message(clean_msg)
-        await output_manager.chat_memory.update_all_memory()
-        if len(output_manager.chat_memory.all_memory) > mem_len:
+    # print(output_manager.model_dump_json(indent=2))
+    mem_len = len(output_manager.chat_memory.all_memory) + len(output_manager.chat_memory.archived_memory)
+
+    # only process un-archived messages if we're continuing
+    # if args.do_continue:
+    #     message_queue = chat_manager.chat_memory.chat_thread.messages
+    # else:
+    #     message_queue = []
+    #     message_queue.extend(chat_manager.chat_memory.chat_thread.archived_messages)
+    #     message_queue.extend(chat_manager.chat_memory.chat_thread.messages)
+
+    try:
+        mem_delta = 1
+        while mem_delta > 0:
+            await output_manager.chat_memory.update_all_memory()
+            new_len = len(output_manager.chat_memory.all_memory) + len(output_manager.chat_memory.archived_memory)
+            mem_delta = new_len - mem_len
             print(output_manager.chat_memory.all_memory[-1]['content'])
-            mem_len = len(output_manager.chat_memory.all_memory)
-    for msg in chat_manager.chat_memory.chat_thread.messages:
-        clean_msg = {
-            "role": msg['role'],
-            "content": msg['content']
-        }
-        output_manager.append_message(clean_msg)
-        await output_manager.chat_memory.update_all_memory()
-        if len(output_manager.chat_memory.all_memory) > mem_len:
-            print(output_manager.chat_memory.all_memory[-1]['content'])
-            mem_len = len(output_manager.chat_memory.all_memory)
-    
-    output_txt = output_manager.model_dump_json(indent=2)
-    args.output.write_text(output_txt, encoding='utf-8')
+            mem_len = new_len
+    except asyncio.CancelledError:
+        print("User interrupted processing! Output file will still be saved.")
+    finally:
+        output_txt = output_manager.model_dump_json(indent=2)
+        args.output.write_text(output_txt, encoding='utf-8')
 
 if __name__ == "__main__":
     asyncio.run(main())
