@@ -72,6 +72,7 @@ async def main():
         chat_memory=chat_memory
     )
     print(output_manager.model_dump_json(indent=2))
+    mem_len = 0
     for msg in chat_manager.chat_memory.chat_thread.archived_messages:
         clean_msg = {
             "role": msg['role'],
@@ -79,6 +80,9 @@ async def main():
         }
         output_manager.append_message(clean_msg)
         await output_manager.chat_memory.update_all_memory()
+        if len(output_manager.chat_memory.all_memory) > mem_len:
+            print(output_manager.chat_memory.all_memory[-1]['content'])
+            mem_len = len(output_manager.chat_memory.all_memory)
     for msg in chat_manager.chat_memory.chat_thread.messages:
         clean_msg = {
             "role": msg['role'],
@@ -86,6 +90,9 @@ async def main():
         }
         output_manager.append_message(clean_msg)
         await output_manager.chat_memory.update_all_memory()
+        if len(output_manager.chat_memory.all_memory) > mem_len:
+            print(output_manager.chat_memory.all_memory[-1]['content'])
+            mem_len = len(output_manager.chat_memory.all_memory)
     
     output_txt = output_manager.model_dump_json(indent=2)
     args.output.write_text(output_txt, encoding='utf-8')
