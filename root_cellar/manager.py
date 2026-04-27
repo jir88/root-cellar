@@ -555,6 +555,7 @@ class HierarchicalSummaryMemory(ChatMemory):
 class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
     """
     Manages chat memory using the same hierarchical method as the superclass.
+    Allows more than one top-level summary message.
     Entity management uses pydantic to generate and load entities.
     """
     
@@ -562,6 +563,161 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
         default=...,
         description="The entity manager object associated with this memory object."
     )
+    
+    async def update_all_memory(self):
+        """
+        Update memory so that all message levels fit within their corresponding
+        token allotments. If the raw messages themselves are too big, the oldest
+        messages will be summarized and archived. Note that this process only 
+        summarizes the oldest n_tok_summarize tokens of each level (rounded up to
+        the next message), so one or more levels may still be 'over-budget' afterwards.
+
+        This function also updates the entity list or creates a new one if none is present.
+        """
+
+        # first memory will be in the highest current level
+        if len(self.all_memory) > 0:
+            current_level = self.all_memory[0]['level']
+        else:
+            # no memories, so we're at level 0 (raw messages)
+            current_level = 0
+        
+        # tokens occupied by higher levels of summary
+        higher_level_tokens = 0
+        
+        # the index of the first summary we will be summarizing
+        # starts at 0, then updated as we finish handling each level
+        start_summ_index = 0
+
+        # subtract system prompt and active entity descriptions from the context size
+        # since those tokens aren't available to put messages or summaries in
+        system_entities = {}
+        for ent in self.get_always_on_entities():
+            system_entities[ent.id] = ent
+        for ent in self.get_recent_summary_entities():
+            system_entities[ent.id] = ent
+        summary_entities = [ent.name + " " + ent.description for ent in system_entities.values()]
+        ent_txt = "\n".join(summary_entities)
+        # calculate length of prompt plus entities
+        len_sys_prompt = self.summary_llm.count_tokens(self.chat_thread.system_prompt + "\n" + ent_txt)
+        available_context = self.summary_llm.sampling_options['num_ctx'] - len_sys_prompt
+
+        # now iterate through the levels until we hit the raw message level
+        while current_level > 0:
+            # find index of first summary in this level
+            start_summ_index = self._get_index_of_first_summary_in_level(level=current_level)
+            # is this level too big?
+            level_allowance = available_context*self.prop_ctx*self.prop_summary**current_level
+            current_level_tokens = self.summary_level_size(level=current_level)
+            if (higher_level_tokens + current_level_tokens) >= level_allowance:
+                # just handle top level as a normal level with a size limit
+                idx_to_summarize = self._get_summary_indices_in_level(level=current_level)
+                # get messages within level that we are going to summarize
+                lim_idx = self._get_messages_with_token_size(
+                    msgs=[self.all_memory[i] for i in idx_to_summarize],
+                    n_tok=self.n_tok_summarize
+                )
+                idx_to_summarize = idx_to_summarize[slice(lim_idx+1)]
+                # summarize the messages
+                summarized_messages = [self.all_memory[i] for i in idx_to_summarize]
+                new_top_summary = await self._summarize_messages(
+                    messages=summarized_messages,
+                    prior_summaries=self.all_memory[:start_summ_index]
+                )
+                # get the entity IDs mentioned in the summaries we summarized
+                mentioned_entities = set()
+                for msg in summarized_messages:
+                    msg_entities = msg.get('entities')
+                    if msg_entities is not None:
+                        mentioned_entities.update(msg_entities)
+                # add their IDs to the new summary
+                mentioned_entities = [entity for entity in mentioned_entities]
+
+                # don't update entity list here -- we've already ingested that data
+                # when summarizing the raw messages
+                # put old summary messages in archive
+                self.archived_memory.extend(summarized_messages)
+                # delete from active summaries
+                # have to work in reverse order so indices don't change while deleting
+                for i in reversed(idx_to_summarize):
+                    del self.all_memory[i]
+                # insert new summary
+
+                print("New level " + str(min(current_level + 1, self.n_levels)) + " summary: " + new_top_summary)
+
+                nts_dict = {
+                    # make sure updated top-level summaries keep the same level
+                    'level': min(current_level + 1, self.n_levels),
+                    # last message index of the last summary in this summary
+                    'msg_idx': max([s['msg_idx'] for s in summarized_messages]),
+                    'content': new_top_summary,
+                    'entities': mentioned_entities
+                }
+                self.all_memory.insert(
+                    # replace the first summarized index
+                    idx_to_summarize[0],
+                    nts_dict
+                )
+            # add current level's remaining tokens to the cumulative total
+            higher_level_tokens += self.summary_level_size(level=current_level)
+            # move to next level down
+            current_level -= 1
+
+        # now we look at the raw messages
+        # index of first summary in this level is the end of the memory list
+        start_summ_index = len(self.all_memory)
+        # is message level too big?
+        level_allowance = available_context*self.prop_ctx
+        # how long is the current message thread?
+        current_level_text = ""
+        for summary in self.chat_thread.messages:
+            current_level_text += " " + summary['content']
+        current_level_tokens = self._chars_to_tokens(current_level_text)
+        # if it is too big
+        if (higher_level_tokens + current_level_tokens) >= level_allowance:
+            # index of last message that fills up our summarization budget
+            lim_idx = self._get_messages_with_token_size(
+                msgs=self.chat_thread.messages,
+                n_tok=self.n_tok_summarize
+            )
+            summarized_messages = self.chat_thread.messages[slice(lim_idx+1)]
+            # summarize
+            new_top_summary = await self._summarize_messages(
+                messages=summarized_messages,
+                prior_summaries=self.all_memory
+            )
+
+            print("New level 1 summary: " + new_top_summary)
+            
+            # update entity list
+            await self._update_entity_definitions(
+                messages=summarized_messages,
+                prior_summaries=self.all_memory[:start_summ_index]
+            )
+            # check for entities in the summarized messages
+            # allows for case where a new entity has just been mentioned
+            mentioned_entities = set()
+            for msg in summarized_messages:
+                entity_ids = [entity.id for entity in self.entity_manager.detect_entities(msg['content'])]
+                mentioned_entities.update(entity_ids)
+            # now convert entity IDs to a list
+            mentioned_entities = list(mentioned_entities)
+
+            # archive these messages from the chat thread
+            self.chat_thread.archive_messages(
+                start_idx=0,
+                stop_idx=lim_idx+1
+            )
+            # insert new first-level summary
+            nts_dict = {
+                'level': 1,
+                # last message index of the last message in this summary
+                'msg_idx': round(summarized_messages[-1]['id']),
+                'content': new_top_summary,
+                'entities': mentioned_entities
+            }
+            # new summary goes at the end
+            self.all_memory.append(nts_dict)
 
     def get_recent_summary_entities(self) -> List[Entity]:
         """Get a list of all the entities mentioned in the most recent memory summaries."""
