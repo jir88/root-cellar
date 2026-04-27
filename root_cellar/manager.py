@@ -53,11 +53,16 @@ class ChatThread(BaseModel):
         self.archived_messages.extend(self.messages[start_idx:stop_idx])
         del self.messages[start_idx:stop_idx]
 
-    def format_readable(self):
+    def format_readable(self, entity_manager:JSONEntityManager=None):
         """
         Convert all messages in this thread into a human-readable and editable
         format. Message roles are displayed in curly brackets: {{role}} with
         message text following. Leading and trailing whitespace are ignored.
+
+        Args:
+            entity_manager: Optional entity manager to enable converting entity IDs to names.
+        Returns:
+            The formatted text version of this chat thread.
         """
         result = ""
         for msg in self.messages:
@@ -66,6 +71,8 @@ class ChatThread(BaseModel):
             # add entities, if any
             entities = msg.get('entities')
             if entities is not None:
+                if entity_manager is not None:
+                    entities = [entity_manager.get_entity_with_id(entity).name for entity in entities]
                 result += json.dumps(entities) + "\n"
             else:
                 result += "[]\n"
@@ -73,7 +80,7 @@ class ChatThread(BaseModel):
             result += msg['content'] + "\n"
         return result
 
-    def import_readable(self, formatted_messages:str):
+    def import_readable(self, formatted_messages:str, entity_manager:JSONEntityManager=None):
         """
         Parse messages exported by format_readable and use them to replace any
         existing messages in this chat session.
@@ -96,6 +103,8 @@ class ChatThread(BaseModel):
             ent_end = message_text.find("]")
             if ent_start < ent_end and ent_start != -1 and ent_end != -1:
                 entities = json.loads(message_text[ent_start:ent_end+1])
+                if entity_manager is not None:
+                    entities = [entity_manager.get_entity_with_name(entity).id for entity in entities]
             else:
                 entities = []
             msg_dict = {
