@@ -241,12 +241,17 @@ class HierarchicalSummaryMemory(ChatMemory):
         # starts at 0, then updated as we finish handling each level
         start_summ_index = 0
 
+        # subtract system prompt and active entity descriptions from the context size
+        # since those tokens aren't available to put messages or summaries in
+        len_sys_prompt = self.summary_llm.count_tokens(self.chat_thread.system_prompt)
+        available_context = self.summary_llm.sampling_options['num_ctx'] - len_sys_prompt
+
         # now iterate through the levels until we hit the raw message level
         while current_level > 0:
             # find index of first summary in this level
             start_summ_index = self._get_index_of_first_summary_in_level(level=current_level)
             # is this level too big?
-            level_allowance = self.summary_llm.sampling_options['num_ctx']*self.prop_ctx*self.prop_summary**current_level
+            level_allowance = available_context*self.prop_ctx*self.prop_summary**current_level
             current_level_tokens = self.summary_level_size(level=current_level)
             if (higher_level_tokens + current_level_tokens) >= level_allowance:
                 # if the next-to-highest summary level is too big, we include the top level summary
@@ -310,7 +315,7 @@ class HierarchicalSummaryMemory(ChatMemory):
         # index of first summary in this level is the end of the memory list
         start_summ_index = len(self.all_memory)
         # is message level too big?
-        level_allowance = self.summary_llm.sampling_options['num_ctx']*self.prop_ctx
+        level_allowance = available_context*self.prop_ctx
         # how long is the current message thread?
         current_level_text = ""
         for summary in self.chat_thread.messages:
