@@ -364,7 +364,7 @@ class JSONEntityManager(EntityManager):
         new_ent_prompt = {
             'role': 'user',
             'content': (
-                "Based on the messages and the existing entity list, are there any new entities "
+                "Based on the messages and the existing entity list, are there any important new entities "
                 "we need to add to the entity list? Respond ONLY with a comma-separated list containing "
                 "any new entities that should be added. Surround the list with square brackets, like so:\n\n"
                 "[name1, name2, name3, name4]\n\n"
