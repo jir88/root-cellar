@@ -48,24 +48,30 @@ class Entity(BaseModel):
         description="Should this entity always be included in context, even if not mentioned?"
     )
 
-    last_used_in_summary: int = Field( # maybe not store here?
+    last_used_in_summary: Optional[int] = Field( # maybe not store here?
         default=-1,
+        deprecated=True,
+        exclude=True,
         description=(
             "The index of the most recent summary where this entity appeared, whether or not ",
             "the entity is directly mentioned in the summary text."
         )
     )
 
-    last_injected_with_message: int = Field( # maybe not put this here?
+    last_injected_with_message: Optional[int] = Field( # maybe not put this here?
         default=-1,
+        deprecated=True,
+        exclude=True,
         description=(
             "The index of the last AI message where this entity was injected as context. ",
             "If the entity is injected at the beginning via a summary, this value will be -1."
         )
     )
     
-    is_in_context: bool = Field(
+    is_in_context: Optional[bool] = Field(
         default=False,
+        deprecated=True,
+        exclude=True,
         description="Whether or not this entity is currently injected into the chat thread."
     )
 
