@@ -102,16 +102,7 @@ async def main():
         llm=settings.llm,
         chat_memory=chat_memory
     )
-    # print(output_manager.model_dump_json(indent=2))
     mem_len = len(output_manager.chat_memory.all_memory) + len(output_manager.chat_memory.archived_memory)
-
-    # only process un-archived messages if we're continuing
-    # if args.do_continue:
-    #     message_queue = chat_manager.chat_memory.chat_thread.messages
-    # else:
-    #     message_queue = []
-    #     message_queue.extend(chat_manager.chat_memory.chat_thread.archived_messages)
-    #     message_queue.extend(chat_manager.chat_memory.chat_thread.messages)
 
     try:
         mem_delta = 1
@@ -119,7 +110,6 @@ async def main():
             await output_manager.chat_memory.update_all_memory()
             new_len = len(output_manager.chat_memory.all_memory) + len(output_manager.chat_memory.archived_memory)
             mem_delta = new_len - mem_len
-            print(output_manager.chat_memory.all_memory[-1]['content'])
             mem_len = new_len
     except asyncio.CancelledError:
         print("User interrupted processing! Output file will still be saved.")
