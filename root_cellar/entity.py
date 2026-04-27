@@ -453,6 +453,13 @@ class JSONEntityManager(EntityManager):
                 return entity
         return None
 
+    def get_entity_with_name(self, name:str) -> Entity:
+        """Get the entity with a given name, if any exists."""
+        for entity in self.entity_list:
+            if entity.name == name:
+                return entity
+        return None
+
     def format_readable(self) -> str:
         """
         Convert entities to JSON for manual editing.
