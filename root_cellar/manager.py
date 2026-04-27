@@ -507,7 +507,8 @@ class HierarchicalSummaryMemory(ChatMemory):
             # add entities, if any
             entities = mem.get('entities')
             if entities is not None:
-                result += json.dumps(entities) + "\n"
+                entity_names = [self.entity_manager.get_entity_with_id(entity).name for entity in entities]
+                result += json.dumps(entity_names) + "\n"
             else:
                 result += "[]\n"
             # actual message text
@@ -539,13 +540,14 @@ class HierarchicalSummaryMemory(ChatMemory):
             ent_end = message_text.find("]")
             if ent_start < ent_end and ent_start != -1 and ent_end != -1:
                 entities = json.loads(message_text[ent_start:ent_end+1])
+                entity_ids = [self.entity_manager.get_entity_with_name(name).id for name in entities]
             else:
-                entities = []
+                entity_ids = []
             msg_dict = {
                 "level": int(msg_parts[i]),
                 "msg_idx": int(msg_parts[i + 1]),
                 "content": message_text[ent_end+1:].strip(),
-                "entities": entities
+                "entities": entity_ids
             }
             parsed_messages.append(msg_dict)
         self.all_memory = parsed_messages
