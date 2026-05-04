@@ -39,6 +39,11 @@ class Entity(BaseModel):
         description="The name of this entity."
     )
 
+    aliases: List[str] = Field(
+        default=[],
+        description="A list of alternative aliases or keywords associated with this entity."
+    )
+
     description: str = Field(
         description="A description of this entity. Use more detail for more important entities."
     )
@@ -407,7 +412,14 @@ class JSONEntityManager(EntityManager):
         # get unique names in case LLM repeated any
         list_names = set(list_names)
         # make sure these names are actually not in the existing list
-        list_names = list_names.difference([e.name for e in updated_list])
+        # collect all names and aliases
+        existing_names = []
+        for e in updated_list:
+            existing_names.append(e.name)
+            existing_names.extend(e.aliases)
+        existing_names = set(existing_names)
+        # get the suggested new ones that aren't in existing list
+        list_names = list_names.difference(existing_names)
         
         # if nothing new to add
         if len(list_names) == 0:
@@ -446,11 +458,16 @@ class JSONEntityManager(EntityManager):
         """
         Check whether any entities are mentioned in a string.
         """
-        found_entities = []
+        found_entities = {}
         for entity in self.entity_list:
+            # check name
             if text.find(entity.name) != -1:
-                found_entities.append(entity)
-        return found_entities
+                found_entities[entity.name] = entity
+            # check aliases
+            for alias in entity.aliases:
+                if text.find(alias) != -1:
+                    found_entities[entity.name] = entity
+        return list(found_entities.values())
 
     def get_entity_with_id(self, id:str) -> Entity:
         """Get the entity with a given ID, if any exists."""
@@ -463,6 +480,8 @@ class JSONEntityManager(EntityManager):
         """Get the entity with a given name, if any exists."""
         for entity in self.entity_list:
             if entity.name == name:
+                return entity
+            if name in entity.aliases:
                 return entity
         return None
 
