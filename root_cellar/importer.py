@@ -88,6 +88,7 @@ async def main():
         summary_llm=settings.chat_memory.summary_llm,
         chat_thread=chat_thread,
         entity_manager=entity_manager,
+        summary_prompt=settings.chat_memory.summary_prompt,
         prop_ctx=settings.chat_memory.prop_ctx,
         prop_summary=settings.chat_memory.prop_summary,
         n_levels=settings.chat_memory.n_levels,
