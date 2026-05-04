@@ -507,7 +507,9 @@ class HierarchicalSummaryMemory(ChatMemory):
             # add entities, if any
             entities = mem.get('entities')
             if entities is not None:
-                entity_names = [self.entity_manager.get_entity_with_id(entity).name for entity in entities]
+                entity_names = [self.entity_manager.get_entity_with_id(entity) for entity in entities]
+                # stale IDs will come back as None, need to drop those
+                entity_names = [entity.name for entity in entity_names if entity is not None]
                 result += json.dumps(entity_names) + "\n"
             else:
                 result += "[]\n"
