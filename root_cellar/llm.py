@@ -15,12 +15,15 @@ class LLM(BaseModel, ABC):
     sampling_options: Optional[Dict[str, Any]] = Field(
         default={
             "num_predict": 1024,
-            "num_ctx": 8192,
             "temperature": 1.0,
             "min_p": 0.1,
             "keep_alive": "15m"
         },
         description="Dictionary of OpenAI-compatible sampling parameters to use."
+    )
+    context_window: int = Field(
+        default=8192,
+        description="Context window size for the underlying LLM."
     )
 
     class Config:

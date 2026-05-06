@@ -244,7 +244,7 @@ class HierarchicalSummaryMemory(ChatMemory):
         # subtract system prompt and active entity descriptions from the context size
         # since those tokens aren't available to put messages or summaries in
         len_sys_prompt = self.summary_llm.count_tokens(self.chat_thread.system_prompt)
-        available_context = self.summary_llm.sampling_options['num_ctx'] - len_sys_prompt
+        available_context = self.summary_llm.context_window - len_sys_prompt
 
         # now iterate through the levels until we hit the raw message level
         while current_level > 0:
@@ -602,7 +602,7 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
         ent_txt = "\n".join(summary_entities)
         # calculate length of prompt plus entities
         len_sys_prompt = self.summary_llm.count_tokens(self.chat_thread.system_prompt + "\n" + ent_txt)
-        available_context = self.summary_llm.sampling_options['num_ctx'] - len_sys_prompt
+        available_context = self.summary_llm.context_window - len_sys_prompt
 
         # now iterate through the levels until we hit the raw message level
         while current_level > 0:
