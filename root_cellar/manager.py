@@ -996,6 +996,69 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
             stream=stream
         )
     
+    async def all_context_sizes(self) -> List[str, Dict]:
+        """
+        Estimate the number of tokens in each part of the context, including the
+        system prompt, injected entities, summary levels, and in-context messages.
+
+        Returns: a list with the sizes for the various parts of context. Each 
+            value is a dict with a label, level number, the raw size, and the 
+            proportion of allotted context, if relevant.
+        """
+        context_sizes = []
+        total_size = 0
+
+        # size of the raw system prompt
+        sys_prompt_size = await self.llm.count_tokens(self.chat_memory.chat_thread.system_prompt)
+        part_data = {
+            'label': "System prompt",
+            'level': -1,
+            'tokens': sys_prompt_size,
+            'percent': -1
+        }
+        context_sizes.append(part_data)
+        total_size += sys_prompt_size
+
+        # calculate size of raw messages
+        level_size = 0
+        for msg in self.chat_memory.chat_thread.messages:
+            msg_size = await self.llm.count_tokens(msg['content'])
+            level_size += msg_size
+        total_size += level_size
+        # calculate percent of alloted space messages are occupying
+        level_allowance = self.llm.context_window*self.chat_memory.prop_ctx
+        level_pct = int(level_size/level_allowance*100)
+        part_data = {
+            'label': "Messages",
+            'level': 0,
+            'tokens': level_size,
+            'percent': level_pct
+        }
+        context_sizes.append(part_data)
+
+        # now do summary levels
+        for level in range(1, self.chat_memory.n_levels + 1):
+            level_size = await self.chat_memory.summary_level_size(level=level, llm=self.llm)
+            level_allowance = self.llm.context_window*self.chat_memory.prop_ctx*self.chat_memory.prop_summary**level
+            level_pct = int(level_size/level_allowance*100)
+            part_data = {
+                'label': f"Level {level}",
+                'level': level,
+                'tokens': level_size,
+                'percent': level_pct
+            }
+            context_sizes.append(part_data)
+            total_size += level_size
+        
+        part_data = {
+            'label': "Total",
+            'level': -1,
+            'tokens': total_size,
+            'percent': int(total_size/self.llm.context_window*100)
+        }
+        context_sizes.append(part_data)
+        return context_sizes
+    
     def get_recent_summary_entities(self) -> List[Entity]:
         """Get a list of all the entities mentioned in the most recent memory summaries."""
         return self.chat_memory.get_recent_summary_entities()
