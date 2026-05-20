@@ -67,6 +67,7 @@ async def main():
     if args.do_continue:
         chat_thread = chat_manager.chat_memory.chat_thread
     else:
+        # starting fresh, so need to assemble the full chat thread
         chat_thread = ChatThread(session_id=str(uuid.uuid4()), system_prompt=chat_manager.chat_memory.chat_thread.system_prompt)
         idx = 0
         for msg in chat_manager.chat_memory.chat_thread.archived_messages:
@@ -105,6 +106,10 @@ async def main():
     )
     mem_len = len(output_manager.chat_memory.all_memory) + len(output_manager.chat_memory.archived_memory)
 
+    print("Context length: " + str(output_manager.chat_memory.summary_llm.context_window))
+    print("# of levels:" + str(output_manager.chat_memory.n_levels))
+    print("Tokens to summarize: " + str(output_manager.chat_memory.n_tok_summarize))
+    
     try:
         mem_delta = 1
         while mem_delta > 0:
