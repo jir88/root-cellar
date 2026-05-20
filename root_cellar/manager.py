@@ -243,7 +243,7 @@ class HierarchicalSummaryMemory(ChatMemory):
 
         # subtract system prompt and active entity descriptions from the context size
         # since those tokens aren't available to put messages or summaries in
-        len_sys_prompt = self.summary_llm.count_tokens(self.chat_thread.system_prompt)
+        len_sys_prompt = await self.summary_llm.count_tokens(self.chat_thread.system_prompt)
         available_context = self.summary_llm.context_window - len_sys_prompt
 
         # now iterate through the levels until we hit the raw message level
@@ -444,7 +444,7 @@ class HierarchicalSummaryMemory(ChatMemory):
                 level_idx.append(idx)
         return level_idx
 
-    def _get_messages_with_token_size(self, msgs, n_tok:int):
+    async def _get_messages_with_token_size(self, msgs, n_tok:int):
         """
         Calculates the index of the first message in this list in which
         the cumulative number of tokens exceeds n_tok, or len(msgs) if
@@ -453,13 +453,14 @@ class HierarchicalSummaryMemory(ChatMemory):
         cum_tokens = 0
 
         for i in range(len(msgs)):
-            cum_tokens += self._chars_to_tokens(text=msgs[i]['content'])
+            msg_tokens = await self._chars_to_tokens(text=msgs[i]['content'])
+            cum_tokens += msg_tokens
             if cum_tokens >= n_tok:
                 # this is the message where we go over the token limit
                 return i
         return len(msgs)
     
-    def summary_level_size(self, level:int):
+    async def summary_level_size(self, level:int, llm:LLMType = None) -> int:
         """
         Estimate the number of tokens in all summaries of a given level.
         We concatenate all the summaries and tokenize them at once to avoid
@@ -467,8 +468,10 @@ class HierarchicalSummaryMemory(ChatMemory):
 
         Args:
         level (int): the summary level of interest
+        llm (LLMType): optional LLM to use for the calculations, defaults to the summary LLM
 
-        Returns: the approximate number of tokens.
+        Returns:
+        the approximate number of tokens.
         """
         if len(self.all_memory) == 0:
             return 0
@@ -477,20 +480,25 @@ class HierarchicalSummaryMemory(ChatMemory):
             if summary['level'] == level:
                 level_text += " " + summary['content']
 
-        return self._chars_to_tokens(level_text)
+        return await self._chars_to_tokens(level_text, llm=llm)
     
-    def _chars_to_tokens(self, text:str):
+    async def _chars_to_tokens(self, text:str, llm:LLMType = None) -> int:
         """
         If possible, uses LLM tokenizer to count tokens. Otherwise, uses an
         extremely rough estimation of tokens in a string (~3.5 chars/token).
 
         Args:
         text (str): the text to be estimated
+        llm (LLMType): optional LLM to use for the calculations, defaults to the summary LLM
 
-        Returns: the approximate number of tokens
+        Returns: 
+        the approximate number of tokens
         """
-        if isinstance(self.summary_llm, OpenAILLM):
-            return self.summary_llm.count_tokens(text)
+        if llm is None:
+            llm = self.summary_llm
+        
+        if isinstance(llm, OpenAILLM):
+            return await llm.count_tokens(text)
         return max(1, len(text)/3.5)
 
     def format_readable(self):
@@ -601,7 +609,7 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
         summary_entities = [ent.name + " " + ent.description for ent in system_entities.values()]
         ent_txt = "\n".join(summary_entities)
         # calculate length of prompt plus entities
-        len_sys_prompt = self.summary_llm.count_tokens(self.chat_thread.system_prompt + "\n" + ent_txt)
+        len_sys_prompt = await self.summary_llm.count_tokens(self.chat_thread.system_prompt + "\n" + ent_txt)
         available_context = self.summary_llm.context_window - len_sys_prompt
 
         # now iterate through the levels until we hit the raw message level
@@ -610,12 +618,12 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
             start_summ_index = self._get_index_of_first_summary_in_level(level=current_level)
             # is this level too big?
             level_allowance = available_context*self.prop_ctx*self.prop_summary**current_level
-            current_level_tokens = self.summary_level_size(level=current_level)
+            current_level_tokens = await self.summary_level_size(level=current_level)
             if (higher_level_tokens + current_level_tokens) >= level_allowance:
                 # just handle top level as a normal level with a size limit
                 idx_to_summarize = self._get_summary_indices_in_level(level=current_level)
                 # get messages within level that we are going to summarize
-                lim_idx = self._get_messages_with_token_size(
+                lim_idx = await self._get_messages_with_token_size(
                     msgs=[self.all_memory[i] for i in idx_to_summarize],
                     n_tok=self.n_tok_summarize
                 )
@@ -661,7 +669,7 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
                     nts_dict
                 )
             # add current level's remaining tokens to the cumulative total
-            higher_level_tokens += self.summary_level_size(level=current_level)
+            higher_level_tokens += await self.summary_level_size(level=current_level)
             # move to next level down
             current_level -= 1
 
@@ -674,11 +682,11 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
         current_level_text = ""
         for summary in self.chat_thread.messages:
             current_level_text += " " + summary['content']
-        current_level_tokens = self._chars_to_tokens(current_level_text)
+        current_level_tokens = await self._chars_to_tokens(current_level_text)
         # if it is too big
         if (higher_level_tokens + current_level_tokens) >= level_allowance:
             # index of last message that fills up our summarization budget
-            lim_idx = self._get_messages_with_token_size(
+            lim_idx = await self._get_messages_with_token_size(
                 msgs=self.chat_thread.messages,
                 n_tok=self.n_tok_summarize
             )
