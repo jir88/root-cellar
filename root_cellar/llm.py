@@ -1,3 +1,4 @@
+import httpx
 import openai
 import requests
 from abc import ABC
@@ -238,7 +239,7 @@ class OpenAILLM(LLM):
         parsed_response = response_model.model_validate_json(response.choices[0].message.content)
         return parsed_response
 
-    def count_tokens(self, text:str):
+    async def count_tokens(self, text:str) -> int:
         """
         Count the number of tokens in a given string using the /tokenize upstream endpoint, if available on this server.
         This only really works with llama-swap.
@@ -257,7 +258,19 @@ class OpenAILLM(LLM):
         llm_url = self.client.base_url
         tk_url = llm_url.scheme + "://" + llm_url.netloc.decode() + "/upstream/" + self.model + "/tokenize"
         # Send the POST request
-        response = requests.post(tk_url, headers=headers, json=payload)
+        async with httpx.AsyncClient() as client:
+            try:
+                # The 'await' keyword allows the event loop to run other tasks 
+                # while waiting for the network response.
+                response = await client.post(tk_url, headers=headers, json=payload)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                print(f"HTTP error occurred when requesting token count: {e}")
+                return None
+            except httpx.RequestError as e:
+                print(f"An error occurred while requesting token count: {e}")
+                return None
+        # response = requests.post(tk_url, headers=headers, json=payload)
 
         # Check if the request was successful
         if response.status_code == 200:
@@ -269,7 +282,7 @@ class OpenAILLM(LLM):
 
             return len(tokens)
         else:
-            print(f"Error: {response.status_code} - {response.text}")
+            print(f"Error counting tokens: {response.status_code} - {response.text}")
             return None
 
 # a union type covering the possible LLM types
