@@ -1004,7 +1004,7 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
             stream=stream
         )
     
-    async def all_context_sizes(self) -> List[str, Dict]:
+    async def all_context_sizes(self) -> List[Dict]:
         """
         Estimate the number of tokens in each part of the context, including the
         system prompt, injected entities, summary levels, and in-context messages.
@@ -1026,6 +1026,26 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         }
         context_sizes.append(part_data)
         total_size += sys_prompt_size
+
+        # calculate size of injected entities
+        # pull always-on entities and recent summary entities
+        sys_prompt_entities = self._get_always_on_entities()
+        for entity in self.get_recent_summary_entities():
+            # don't duplicate entities
+            if entity is not None and entity not in sys_prompt_entities:
+                sys_prompt_entities.append(entity)
+        # add entity list size, if any
+        if len(sys_prompt_entities) > 0:
+            ent_txt = "\n\n".join([ent.name + ": " + ent.description for ent in sys_prompt_entities])
+            level_size = await self.llm.count_tokens(ent_txt)
+            part_data = {
+                'label': "Entities in memory",
+                'level': -1,
+                'tokens': level_size,
+                'percent': -1
+            }
+            context_sizes.append(part_data)
+            total_size += level_size
 
         # calculate size of raw messages
         level_size = 0
