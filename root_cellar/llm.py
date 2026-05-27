@@ -1,6 +1,6 @@
 import httpx
 import openai
-import requests
+import asyncio
 from abc import ABC
 from typing import Union,Dict,Optional,Any,Literal,List,Type
 from pydantic import BaseModel,Field
@@ -100,6 +100,15 @@ class OpenAILLM(LLM):
         default="http://127.0.0.1:8080/v1",
         description="The URL of the API endpoint."
     )
+    server_type: str = Field(
+        default="unknown",
+        description="Type of server this instance is connected to. This determines what extra endpoints are available."
+    )
+    upstream_type: str = Field(
+        default="unknown",
+        description="If this instance is connected to a proxy like llama-swap, defines the type of upstream server."
+    )
+
     # client field is only populated at runtime
     client: Optional[Any] = Field(default=None, exclude=True)
 
@@ -113,6 +122,69 @@ class OpenAILLM(LLM):
             timeout=1200,
             max_retries=10
         )
+    
+    async def check_server_type(self) -> str:
+        """
+        Determine what type of server this instance is connected to.
+
+        Returns:
+            A string describing the server type. For llama-swap servers, \
+            query self.upstream_type to determine what upstream server is \
+            behind the llama-swap proxy.
+        """
+        # get the server location
+        llm_url = self.client.base_url
+        url_host = llm_url.scheme + "://" + llm_url.netloc.decode()
+
+        # check for ollama
+        if self._check_endpoint(url=url_host + "/api/tags"):
+            self.server_type = "ollama"
+            self.upstream_type = "none"
+            return self.server_type
+
+        # check for llama-server
+        if self._check_endpoint(url=url_host + "/lora-adapters"):
+            self.server_type = "llama-server"
+            self.upstream_type = "none"
+            return self.server_type
+
+        # check for llama-swap
+        if self._check_endpoint(url=url_host + "/running"):
+            self.server_type = "llama-swap"
+            # check backend for llama-server
+            llm_url = self.client.base_url
+            upstream_url = llm_url.scheme + "://" + llm_url.netloc.decode() + "/upstream/" + self.model
+            
+            # check for ollama
+            if self._check_endpoint(url=upstream_url + "/api/tags"):
+                self.upstream_type = "ollama"
+                return self.server_type
+
+            # check for llama-server
+            if self._check_endpoint(url=upstream_url + "/lora-adapters"):
+                self.upstream_type = "llama-server"
+                return self.server_type
+            
+            # don't know backend
+            print("Unknown backend, defaulting to generic openai")
+            self.upstream_type = "openai"
+            return self.server_type
+        
+        # don't know backend
+        print("Unknown server, defaulting to generic openai")
+        self.server_type = "openai"
+        self.upstream_type = "none"
+        return self.server_type
+
+    def _check_endpoint(self, url):
+        """
+        Check to see if an endpoint exists.
+        Returns: true if GET request returns successfully, else false.
+        """
+        response = httpx.get(url=url, timeout=10)
+        print(str(response))
+        return response.status_code == 200
+    
 
     def generate(self, prompt, stream=True):
         """
@@ -297,7 +369,7 @@ if __name__ == "__main__":
         "max_tokens": 12
     }
     llm = OpenAILLM(
-        model="gemma-3-4B-it-UD-Q4_K_XL-cpu",
+        model="gemma-4-26B-A4B-it-UD-Q3_K_M-cpu",
         sampling_options=samp_params,
     )
     # test converting to JSON
@@ -306,59 +378,22 @@ if __name__ == "__main__":
 
     # test converting back
     rehydrated_llm = OpenAILLM.model_validate_json(llm_txt)
-    
-    # print("Generating in instruct mode...")
-    # test_messages = [
-    #     {
-    #         "role": "user",
-    #         "content": "I'm a cat! What are you?"
-    #     }
-    # ]
-    # response = llm.generate_instruct(
-    #     messages=test_messages,
-    #     respond=True,
-    #     response_role="assistant",
-    #     stream=False
-    # )
-    # print(response)
-    # for chunk in response:
-    #     print(chunk)
-       
-    # print("Generating in raw mode...") 
-    # response = llm.generate(
-    #     prompt="I'm a cat, what are you?",
-    #     stream=False
-    # )
-    # print(response)
-    # for chunk in response:
-    #     print(chunk)
-    
-    # # Streaming output
 
-    # print("Streaming in instruct mode...")
-    # test_messages = [
-    #     {
-    #         "role": "user",
-    #         "content": "I'm a cat! What are you?"
-    #     }
-    # ]
-    # response = llm.generate_instruct(
-    #     messages=test_messages,
-    #     respond=True,
-    #     response_role="assistant",
-    #     stream=True
-    # )
-    # print(response)
-    # for chunk in response:
-    #     print(chunk)
-       
-    # print("Streaming in raw mode...") 
-    # response = llm.generate(
-    #     prompt="I'm a cat, what are you?",
-    #     stream=True
-    # )
-    # print(response)
-    # for chunk in response:
-    #     print(chunk)
+    # test tokenizing
+    token_count = llm.count_tokens("Hello my name is bob.")
+    print("Token count: " + str(token_count))
+
+    print("Checking model capabilities...")
+    llm_url = llm.client.base_url
+    url_host = llm_url.scheme + "://" + llm_url.netloc.decode()
+    # check for llama-swap
+    if llm._check_endpoint(url=url_host + "/health"):
+        llm.server_type = "llama-swap"
+        print("Model running on llama-swap!")
     
+    async def test_check_server_type():
+        await llm.check_server_type()
+        print("Server type: " + llm.server_type)
+        print("Upstream type: " + llm.upstream_type)
     
+    asyncio.run(test_check_server_type())
