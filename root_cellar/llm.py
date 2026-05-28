@@ -100,11 +100,11 @@ class OpenAILLM(LLM):
         default="http://127.0.0.1:8080/v1",
         description="The URL of the API endpoint."
     )
-    server_type: str = Field(
+    server_type: Literal['unknown', 'llama-server', 'llama-swap', 'ollama', 'openai'] = Field(
         default="unknown",
         description="Type of server this instance is connected to. This determines what extra endpoints are available."
     )
-    upstream_type: str = Field(
+    upstream_type: Literal['unknown', 'none', 'llama-server', 'ollama', 'openai'] = Field(
         default="unknown",
         description="If this instance is connected to a proxy like llama-swap, defines the type of upstream server."
     )
