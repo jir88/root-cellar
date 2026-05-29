@@ -184,7 +184,6 @@ class OpenAILLM(LLM):
         response = httpx.get(url=url, timeout=10)
         print(str(response))
         return response.status_code == 200
-    
 
     def generate(self, prompt, stream=True):
         """
@@ -314,7 +313,7 @@ class OpenAILLM(LLM):
     async def count_tokens(self, text:str) -> int:
         """
         Count the number of tokens in a given string using the /tokenize upstream endpoint, if available on this server.
-        This only really works with llama-swap.
+        This only really works with llama-swap and llama.cpp. Otherwise, tokens are estimated based on 3.5 chars per token.
 
         Args:
         text (str): The input string to tokenize.
@@ -322,40 +321,61 @@ class OpenAILLM(LLM):
         Returns:
         int: The number of tokens in the input string.
         """
-        headers = {'Content-Type': 'text/plain'}
-
-        # Create the request payload
-        payload = {'content': text}
-        # get the upstream URL, llama-swap doesn't support directly
-        llm_url = self.client.base_url
-        tk_url = llm_url.scheme + "://" + llm_url.netloc.decode() + "/upstream/" + self.model + "/tokenize"
-        # Send the POST request
-        async with httpx.AsyncClient() as client:
-            try:
+        # check server type if needed
+        if self.server_type == "unknown":
+            await self.check_server_type()
+        
+        # llama.cpp llama-server
+        if self.server_type == "llama-server":
+            headers = {'Content-Type': 'text/plain'}
+            # Create the request payload
+            payload = {'content': text}
+            llm_url = self.client.base_url
+            tk_url = llm_url.scheme + "://" + llm_url.netloc.decode() + "/tokenize"
+            # Send the POST request
+            async with httpx.AsyncClient() as client:
                 # The 'await' keyword allows the event loop to run other tasks 
                 # while waiting for the network response.
-                response = await client.post(tk_url, headers=headers, json=payload)
+                response = await client.post(tk_url, headers=headers, json=payload, timeout=60)
+                # error out if request failed
                 response.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                print(f"HTTP error occurred when requesting token count: {e}")
-                return None
-            except httpx.RequestError as e:
-                print(f"An error occurred while requesting token count: {e}")
-                return None
-        # response = requests.post(tk_url, headers=headers, json=payload)
-
-        # Check if the request was successful
-        if response.status_code == 200:
             # Parse the JSON response
             data = response.json()
-
             # Extract the number of tokens from the response
             tokens = data['tokens']
-
+            # return token count
             return len(tokens)
-        else:
-            print(f"Error counting tokens: {response.status_code} - {response.text}")
-            return None
+
+        if self.server_type == "llama-swap" and self.upstream_type == "llama-server":
+            headers = {'Content-Type': 'text/plain'}
+            # Create the request payload
+            payload = {'content': text}
+            # get the upstream URL, llama-swap doesn't support directly
+            llm_url = self.client.base_url
+            tk_url = llm_url.scheme + "://" + llm_url.netloc.decode() + "/upstream/" + self.model + "/tokenize"
+            # Send the POST request
+            async with httpx.AsyncClient() as client:
+                # The 'await' keyword allows the event loop to run other tasks 
+                # while waiting for the network response.
+                response = await client.post(tk_url, headers=headers, json=payload, timeout=30)
+                # raise errors for calling code to deal with as needed
+                response.raise_for_status()
+
+            # Check if the request was successful
+            if response.status_code == 200:
+                # Parse the JSON response
+                data = response.json()
+                # Extract the number of tokens from the response
+                tokens = data['tokens']
+                return len(tokens)
+            else:
+                print(f"Error counting tokens: {response.status_code} - {response.text}")
+                print("Estimating token count instead...")
+                return max(1, len(text)/3.5)
+        
+        # otherwise, we'll just cop out and guess
+        print(f"Server type {self.server_type} with backend {self.backend_type} does not support tokenization. Estimating token count.")
+        return max(1, len(text)/3.5)
 
 # a union type covering the possible LLM types
 # you can discriminate it by using Field(discriminator='llm_class')
@@ -395,5 +415,7 @@ if __name__ == "__main__":
         await llm.check_server_type()
         print("Server type: " + llm.server_type)
         print("Upstream type: " + llm.upstream_type)
+        count = await llm.count_tokens("Hi I am bill!")
+        print("Tokens: " + str(count))
     
     asyncio.run(test_check_server_type())
