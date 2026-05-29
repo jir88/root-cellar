@@ -123,9 +123,12 @@ class OpenAILLM(LLM):
             max_retries=10
         )
     
-    async def check_server_type(self) -> str:
+    async def check_server_type(self, timeout:int=30) -> str:
         """
         Determine what type of server this instance is connected to.
+
+        Args:
+            timeout (int): Timeout length in seconds for GET requests.
 
         Returns:
             A string describing the server type. For llama-swap servers, \
@@ -176,13 +179,17 @@ class OpenAILLM(LLM):
         self.upstream_type = "none"
         return self.server_type
 
-    def _check_endpoint(self, url):
+    def _check_endpoint(self, url, timeout:int=30):
         """
         Check to see if an endpoint exists.
-        Returns: true if GET request returns successfully, else false.
+        Args:
+        url (str|URL): The URL to check with a GET request.
+        timeout (int): Timeout length in seconds.
+
+        Returns:
+        True if GET request returns successfully, else false.
         """
-        response = httpx.get(url=url, timeout=10)
-        print(str(response))
+        response = httpx.get(url=url, timeout=timeout)
         return response.status_code == 200
 
     def generate(self, prompt, stream=True):
@@ -323,7 +330,7 @@ class OpenAILLM(LLM):
         """
         # check server type if needed
         if self.server_type == "unknown":
-            await self.check_server_type()
+            await self.check_server_type(timeout=30)
         
         # llama.cpp llama-server
         if self.server_type == "llama-server":
