@@ -3,7 +3,7 @@ import openai
 import asyncio
 from abc import ABC
 from typing import Union,Dict,Optional,Any,Literal,List,Type
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field,ConfigDict
 
 class LLM(BaseModel, ABC):
     """
@@ -27,8 +27,7 @@ class LLM(BaseModel, ABC):
         description="Context window size for the underlying LLM."
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed = True)
 
     def generate(self, prompt, stream=True):
         """
