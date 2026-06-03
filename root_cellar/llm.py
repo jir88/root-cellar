@@ -328,7 +328,7 @@ class OpenAILLM(LLM):
         int: The number of tokens in the input string.
         """
         # check server type if needed
-        if self.server_type == "unknown":
+        if self.server_type == "unknown" or self.upstream_type == "unknown":
             await self.check_server_type(timeout=30)
         
         # llama.cpp llama-server
@@ -377,11 +377,11 @@ class OpenAILLM(LLM):
             else:
                 print(f"Error counting tokens: {response.status_code} - {response.text}")
                 print("Estimating token count instead...")
-                return max(1, len(text)/3.5)
+                return round(max(1, len(text)/3.5))
         
         # otherwise, we'll just cop out and guess
-        print(f"Server type {self.server_type} with backend {self.backend_type} does not support tokenization. Estimating token count.")
-        return max(1, len(text)/3.5)
+        print(f"Server type {self.server_type} with backend {self.upstream_type} does not support tokenization. Estimating token count.")
+        return round(max(1, len(text)/3.5))
 
 # a union type covering the possible LLM types
 # you can discriminate it by using Field(discriminator='llm_class')
