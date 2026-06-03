@@ -1064,6 +1064,44 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         }
         context_sizes.append(part_data)
 
+        # calculate size of entities injected into raw messages
+
+        # build dict of entities for easy search/add/remove
+        unused_entities = {}
+        for entity in self.chat_memory.entity_manager.entity_list:
+            unused_entities[entity.id] = entity
+        # remove the entities we've already put in the system prompt
+        for entity in sys_prompt_entities:
+            unused_entities.pop(entity.id)
+        # add in-context messages after sys prompt
+        ent_txt = ""
+        for message in self.chat_memory.chat_thread.messages:
+            msg_entity_ids = message.get('entities')
+            # if there are any entities
+            if msg_entity_ids is not None and len(msg_entity_ids) > 0:
+                # get the ones that haven't been injected yet
+                inject_entities = [unused_entities.pop(id) for id in msg_entity_ids if id in unused_entities]
+                # if there are any
+                if len(inject_entities) > 0:
+                    msg_text = "<context>\n\n" + \
+                        "\n\n".join([ent.name + ": " + ent.description for ent in inject_entities]) + \
+                        "\n\n</context>\n\n"
+                    ent_txt += msg_text
+        # calculate length
+        level_size = await self.llm.count_tokens(ent_txt)
+        # add to the total context size
+        total_size += level_size
+        # calculate percent of alloted space messages are occupying
+        level_allowance = self.llm.context_window*self.chat_memory.prop_ctx
+        level_pct = int(level_size/level_allowance*100)
+        part_data = {
+            'label': "Entities in messages",
+            'level': 0,
+            'tokens': level_size,
+            'percent': level_pct
+        }
+        context_sizes.append(part_data)
+
         # now do summary levels
         for level in range(1, self.chat_memory.n_levels + 1):
             level_size = await self.chat_memory.summary_level_size(level=level, llm=self.llm)
