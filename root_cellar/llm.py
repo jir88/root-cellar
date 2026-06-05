@@ -166,16 +166,25 @@ class OpenAILLM(LLM):
             if self._check_endpoint(url=upstream_url + "/lora-adapters"):
                 self.upstream_type = "llama-server"
                 return self.server_type
-            
+            # use /models to check for OpenAI-compliant
+            if self._check_endpoint(url=upstream_url + "/models"):
+                self.upstream_type = "openai"
+                return self.server_type
             # don't know backend
-            print("Unknown backend, defaulting to generic openai")
-            self.upstream_type = "openai"
+            print("Unknown backend")
+            self.upstream_type = "unknown"
             return self.server_type
         
-        # don't know backend
-        print("Unknown server, defaulting to generic openai")
-        self.server_type = "openai"
-        self.upstream_type = "none"
+        # use /models to check for OpenAI-compliant
+        if self._check_endpoint(url=url_host + "/models"):
+            self.server_type = "openai"
+            self.upstream_type = "none"
+            return self.server_type
+        
+        # don't know server
+        print("Unknown server")
+        self.server_type = "unknown"
+        self.upstream_type = "unknown"
         return self.server_type
 
     def _check_endpoint(self, url, timeout:int=30):
