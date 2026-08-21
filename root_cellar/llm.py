@@ -1,9 +1,11 @@
-import httpx
-import openai
 import asyncio
 from abc import ABC
-from typing import Union,Dict,Optional,Any,Literal,List,Type
-from pydantic import BaseModel,Field,ConfigDict
+from typing import Any, Literal
+
+import httpx
+import openai
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class LLM(BaseModel, ABC):
     """
@@ -13,7 +15,7 @@ class LLM(BaseModel, ABC):
     llm_class:Literal['base'] = "base"
 
     model: str = Field(default=None, description="Name of the LLM to use.")
-    sampling_options: Optional[Dict[str, Any]] = Field(
+    sampling_options: dict[str, Any] | None = Field(
         default={
             "num_predict": 1024,
             "temperature": 1.0,
@@ -59,7 +61,7 @@ class LLM(BaseModel, ABC):
         """
         raise NotImplementedError("Method must be implemented in a subclass!")
     
-    def generate_structured(self, messages:List[Dict[str,str]], response_model:Type[BaseModel]):
+    def generate_structured(self, messages:list[dict[str,str]], response_model:type[BaseModel]):
         """
         Respond to a prompt using structured JSON mode.
 
@@ -109,7 +111,7 @@ class OpenAILLM(LLM):
     )
 
     # client field is only populated at runtime
-    client: Optional[Any] = Field(default=None, exclude=True)
+    client: Any | None = Field(default=None, exclude=True)
 
     def model_post_init(self, context:Any) -> None:
         """
@@ -307,7 +309,7 @@ class OpenAILLM(LLM):
                 # stop the LLM generating
                 await response.close()
 
-    def generate_structured(self, messages:List[Dict[str,str]], response_model:Type[BaseModel]):
+    def generate_structured(self, messages:list[dict[str,str]], response_model:type[BaseModel]):
         """
         Respond to a prompt using structured JSON mode.
 
@@ -400,7 +402,7 @@ class OpenAILLM(LLM):
 
 # a union type covering the possible LLM types
 # you can discriminate it by using Field(discriminator='llm_class')
-LLMType = Union[LLM, OpenAILLM]
+LLMType = LLM | OpenAILLM
 
 if __name__ == "__main__":
     # test OpenAILLM
