@@ -1,12 +1,13 @@
 import json
 import re
-from typing import List, Optional, Dict, Any, AnyStr, ClassVar
-from pydantic import BaseModel, Field, SerializeAsAny
 from abc import ABC
+from typing import Any, AnyStr, ClassVar
 
+from pydantic import BaseModel, Field, SerializeAsAny
 
-from root_cellar.llm import OpenAILLM,LLMType
-from root_cellar.entity import SimpleEntityManager,JSONEntityManager, Entity
+from root_cellar.entity import Entity, JSONEntityManager, SimpleEntityManager
+from root_cellar.llm import LLMType, OpenAILLM
+
 
 class ChatThread(BaseModel):
     """
@@ -23,12 +24,12 @@ class ChatThread(BaseModel):
     role_regex: ClassVar[re.Pattern[AnyStr]] = re.compile(r"{{(.+?)}}")
 
     session_id: str = Field(..., description="The unique identifier of this chat thread.")
-    system_prompt: Optional[str] = Field(None, description="An optional system prompt for this chat thread.")
-    messages: List[Dict[str, Any]] = Field(
+    system_prompt: str | None = Field(None, description="An optional system prompt for this chat thread.")
+    messages: list[dict[str, Any]] = Field(
         default=[],
         description="A list of dicts representing the messages in this thread."
     )
-    archived_messages: List[Dict[str, Any]] = Field(
+    archived_messages: list[dict[str, Any]] = Field(
         default=[],
         description="A list of dicts representing archived past messages which are no longer in the context window."
     )
@@ -206,13 +207,13 @@ class HierarchicalSummaryMemory(ChatMemory):
             If this corresponds to less than one message, that whole message will be \
             summarized."
     )
-    all_memory: List[Dict[str, Any]] = Field(
+    all_memory: list[dict[str, Any]] = Field(
         default=[],
         description="Summaries stored as a list of dicts containing summary level, the actual \
             messages (or lower-level summaries) that were summarized, and the index \
             of the final summarized message in the full chat thread"
     )
-    archived_memory: List[Dict[str, Any]] = Field(
+    archived_memory: list[dict[str, Any]] = Field(
         default=[],
         description="Summaries which have been collapsed into the top-level summary."
     )
@@ -364,7 +365,7 @@ class HierarchicalSummaryMemory(ChatMemory):
             # new summary goes at the end
             self.all_memory.append(nts_dict)
 
-    async def _summarize_messages(self, messages:list, prior_summaries:list=[]):
+    async def _summarize_messages(self, messages:list, prior_summaries:list|None=None):
         """
         Summarize a list of messages, optionally including a list of older summaries
         as context.
@@ -376,7 +377,7 @@ class HierarchicalSummaryMemory(ChatMemory):
         Returns: the summary
         """
         # if no prior context, just put 'None' in as a placeholder
-        if len(prior_summaries) == 0:
+        if prior_summaries is None or len(prior_summaries) == 0:
             prior_summaries = [{ 'content': "No prior context." }]
         
         # construct system prompt
@@ -398,7 +399,7 @@ class HierarchicalSummaryMemory(ChatMemory):
         response = response['response']
         return response.strip()
     
-    async def _update_entity_definitions(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]]):
+    async def _update_entity_definitions(self, messages: list[dict[str, str]], prior_summaries: list[dict[str, str]]):
         """
         Update any relevant entities. Extend this method to provide more complex handling.
         """
@@ -682,6 +683,7 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
         current_level_text = ""
         for summary in self.chat_thread.messages:
             current_level_text += " " + summary['content']
+            # TODO: include entities in token count
         current_level_tokens = await self._chars_to_tokens(current_level_text)
         # if it is too big
         if (higher_level_tokens + current_level_tokens) >= level_allowance:
@@ -729,7 +731,7 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
             # new summary goes at the end
             self.all_memory.append(nts_dict)
 
-    def get_recent_summary_entities(self) -> List[Entity]:
+    def get_recent_summary_entities(self) -> list[Entity]:
         """Get a list of all the entities mentioned in the most recent memory summaries."""
         entity_list = self.entity_manager.entity_list
         # if no summaries, then have all entities injected this way
@@ -746,7 +748,7 @@ class StructuredHierarchicalMemory(HierarchicalSummaryMemory):
         # return the entity objects associated with these IDs
         return [self.entity_manager.get_entity_with_id(id) for id in recent_ids]
 
-    def get_always_on_entities(self) -> List[Entity]:
+    def get_always_on_entities(self) -> list[Entity]:
         """Get a list of the entities flagged as always-on."""
         return [entity for entity in self.entity_manager.entity_list if entity.always_on]
 
@@ -977,7 +979,7 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         for entity in self._get_always_on_entities():
             unused_entities.pop(entity.id)
         for entity in self.get_recent_summary_entities():
-            if entity is not None and entity.id in unused_entities.keys():
+            if entity is not None and entity.id in unused_entities:
                 unused_entities.pop(entity.id)
         # add in-context messages after sys prompt
         for message in self.chat_memory.chat_thread.messages:
@@ -1004,7 +1006,7 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
             stream=stream
         )
     
-    async def all_context_sizes(self) -> List[Dict]:
+    async def all_context_sizes(self) -> list[dict]:
         """
         Estimate the number of tokens in each part of the context, including the
         system prompt, injected entities, summary levels, and in-context messages.
@@ -1125,10 +1127,10 @@ class StructuredHierarchicalManager(HierarchicalSummaryManager):
         context_sizes.append(part_data)
         return context_sizes
     
-    def get_recent_summary_entities(self) -> List[Entity]:
+    def get_recent_summary_entities(self) -> list[Entity]:
         """Get a list of all the entities mentioned in the most recent memory summaries."""
         return self.chat_memory.get_recent_summary_entities()
 
-    def _get_always_on_entities(self) -> List[Entity]:
+    def _get_always_on_entities(self) -> list[Entity]:
         """Get a list of the entities flagged as always-on."""
         return self.chat_memory.get_always_on_entities()
