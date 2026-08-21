@@ -197,7 +197,13 @@ class OpenAILLM(LLM):
         Returns:
         True if GET request returns successfully, else false.
         """
-        response = httpx.get(url=url, timeout=timeout)
+        try:
+            response = httpx.get(url=url, timeout=timeout)
+            response.raise_for_status()
+        except httpx.HTTPError as e:
+            print("Error checking endpoint!")
+            print(str(e))
+            return False
         return response.status_code == 200
 
     def generate(self, prompt, stream=True):
