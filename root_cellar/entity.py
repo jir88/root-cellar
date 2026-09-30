@@ -361,6 +361,7 @@ class JSONEntityManager(EntityManager):
                 updated_entity = Entity(
                     id=entity.id, # keep original entity ID
                     name=entity.name,
+                    aliases=entity.aliases,
                     description=llm_response.strip(),
                     always_on=entity.always_on # keep setting
                 )
