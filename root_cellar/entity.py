@@ -1,10 +1,12 @@
 import re
 import uuid
 from abc import ABC
-from typing import List, Optional, Dict, Any, Literal, Union, AnyStr, ClassVar
-from pydantic import BaseModel,Field,SerializeAsAny,root_validator
+from typing import Any, AnyStr, ClassVar, Literal
+
+from pydantic import BaseModel, Field, SerializeAsAny, root_validator
 
 from .llm import LLMType
+
 
 class SimpleEntity(BaseModel):
     """
@@ -23,7 +25,7 @@ class SimpleEntity(BaseModel):
 class SimpleEntityList(BaseModel):
     """A single list of entities."""
 
-    entities: List[SimpleEntity] = Field(
+    entities: list[SimpleEntity] = Field(
         description="A list of all the entities."
     )
 
@@ -39,7 +41,7 @@ class Entity(BaseModel):
         description="The name of this entity."
     )
 
-    aliases: List[str] = Field(
+    aliases: list[str] = Field(
         default=[],
         description="A list of alternative aliases or keywords associated with this entity."
     )
@@ -53,7 +55,7 @@ class Entity(BaseModel):
         description="Should this entity always be included in context, even if not mentioned?"
     )
 
-    last_used_in_summary: Optional[int] = Field( # maybe not store here?
+    last_used_in_summary: int | None = Field( # maybe not store here?
         default=-1,
         deprecated=True,
         exclude=True,
@@ -63,7 +65,7 @@ class Entity(BaseModel):
         )
     )
 
-    last_injected_with_message: Optional[int] = Field( # maybe not put this here?
+    last_injected_with_message: int | None = Field( # maybe not put this here?
         default=-1,
         deprecated=True,
         exclude=True,
@@ -73,7 +75,7 @@ class Entity(BaseModel):
         )
     )
     
-    is_in_context: Optional[bool] = Field(
+    is_in_context: bool | None = Field(
         default=False,
         deprecated=True,
         exclude=True,
@@ -103,7 +105,7 @@ class GenEntityList(BaseModel):
     to avoid unnecesary cognitive load on the LLM.
     """
 
-    entities: List[GenEntity] = Field(
+    entities: list[GenEntity] = Field(
         default=[],
         description="A list of all the entities."
     )
@@ -116,7 +118,7 @@ class EntityManager(BaseModel, ABC):
     # type name for deserialization
     entity_manager_class:Literal['base'] = "base"
 
-    def update_entities(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]] = []) -> Any:
+    def update_entities(self, messages: list[dict[str, str]], prior_summaries: list[dict[str, str]] | None = None) -> Any:
         """
         Update a list of previously-mentioned entities, optionally including a list of
         older summaries as context.
@@ -142,7 +144,7 @@ class SimpleEntityManager(EntityManager):
         default=...,
         discriminator='llm_class',
         description="LLM instance used to generate the entity list")
-    entity_list: Optional[str] = Field(None, description="Current entity list as a free-form list in a single string")
+    entity_list: str | None = Field(None, description="Current entity list as a free-form list in a single string")
     prompt_entity_list: str = Field(
         default=(
             "You are creating a list of all important entities mentioned thus far "
@@ -167,7 +169,7 @@ class SimpleEntityManager(EntityManager):
             raise ValueError("llm is required for SimpleEntityManager")
         return values
 
-    def update_entities(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]] = []) -> str:
+    def update_entities(self, messages: list[dict[str, str]], prior_summaries: list[dict[str, str]] | None = None) -> str:
         """
         Update a free-form list of previously-mentioned entities, optionally including a list of
         older summaries as context.
@@ -180,7 +182,7 @@ class SimpleEntityManager(EntityManager):
             the updated entity list (string)
         """
         # if no prior context, just put 'No prior context.' in as a placeholder
-        if not prior_summaries:
+        if prior_summaries is None or not prior_summaries:
             prior_summaries = [{'content': "No prior context."}]
 
         # if no existing entity list, put in a placeholder
@@ -229,7 +231,7 @@ class JSONEntityManager(EntityManager):
         default=...,
         discriminator='llm_class',
         description="LLM instance used to generate the entity list")
-    entity_list: List[Entity] = Field(
+    entity_list: list[Entity] = Field(
         default=[], 
         description="A list of the entities mentioned in this chat thread."
     )
@@ -262,7 +264,7 @@ class JSONEntityManager(EntityManager):
             raise ValueError("llm is required for SimpleEntityManager")
         return values
 
-    async def update_entities(self, messages: List[Dict[str, str]], prior_summaries: List[Dict[str, str]] = []) -> List[Entity]:
+    async def update_entities(self, messages: list[dict[str, str]], prior_summaries: list[dict[str, str]] | None = None) -> list[Entity]:
         """
         Update a list of previously-mentioned entities, optionally including a list of
         older summaries as context.
@@ -315,7 +317,7 @@ class JSONEntityManager(EntityManager):
             )
         }
         # add entities we're not going to update into updated list
-        ent_diff = set([entity.id for entity in self.entity_list]).difference([entity.id for entity in entities_to_update])
+        ent_diff = {entity.id for entity in self.entity_list}.difference([entity.id for entity in entities_to_update])
         updated_list = [self.get_entity_with_id(ent_id) for ent_id in ent_diff]
         # for each entity that's been mentioned recently
         for entity in entities_to_update:
@@ -356,7 +358,7 @@ class JSONEntityManager(EntityManager):
                 try:
                     idx = llm_response.index(":")
                     print("index: " + str(idx))
-                except Exception as e:
+                except ValueError as e:
                     print(str(e))
                 updated_entity = Entity(
                     id=entity.id, # keep original entity ID
@@ -455,7 +457,7 @@ class JSONEntityManager(EntityManager):
         self.entity_list = updated_list
         return updated_list
     
-    def detect_entities(self, text:str) -> List[Entity]:
+    def detect_entities(self, text:str) -> list[Entity]:
         """
         Check whether any entities are mentioned in a string.
         """
@@ -500,4 +502,4 @@ class JSONEntityManager(EntityManager):
 
 # a union type covering the possible entity manager types
 # you can discriminate it by using Field(discriminator='entity_manager_class')
-EntityManagerType = Union[EntityManager, SimpleEntityManager, JSONEntityManager]
+EntityManagerType = EntityManager | SimpleEntityManager | JSONEntityManager
